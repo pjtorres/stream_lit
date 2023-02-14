@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def main():
-    st.title("CSV File Manipulator")
+    st.title("Redcap CSV File Manipulator")
 
     uploaded_file = st.file_uploader("Upload a redcap CSV file", type="csv")
     if uploaded_file is not None:
