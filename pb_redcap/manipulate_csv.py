@@ -26,6 +26,8 @@ def main():
 
         # # Drop the duplicate rows
         df.drop_duplicates(subset=['participant_id'], keep='first', inplace=True)
+        df = df.drop(columns = ['redcap_record_metadata'])
+        df['participant_id'] = df['participant_id'].astype(str)
 
         # Display the dataframe in the Streamlit app
         st.write(df)
