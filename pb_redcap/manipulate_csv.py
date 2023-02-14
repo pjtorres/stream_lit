@@ -1,13 +1,15 @@
 import streamlit as st
 import pandas as pd
+import base64
 
 def main():
-    st.title("Redcap CSV File Manipulator")
+    st.title("CSV File Manipulator")
 
     uploaded_file = st.file_uploader("Upload a redcap CSV file", type="csv")
     if uploaded_file is not None:
         # Read the CSV file into a Pandas dataframe
         df = pd.read_csv(uploaded_file)
+
 
         # Do some data manipulation on the dataframe
         # For example, let's add a new column that calculates the sum of two existing columns
@@ -28,16 +30,17 @@ def main():
         df.drop_duplicates(subset=['participant_id'], keep='first', inplace=True)
         df = df.drop(columns = ['redcap_record_metadata'])
         df['participant_id'] = df['participant_id'].astype(str)
-
         # Display the dataframe in the Streamlit app
         st.write(df)
 
-        # Add a button to download the modified CSV file
-        if st.button("Download modified CSV file"):
-            csv = df.to_csv(index=False)
-            b64 = base64.b64encode(csv.encode()).decode()
-            href = f'<a href="data:file/csv;base64,{b64}" download="modified_data.csv">Download modified CSV file</a>'
-            st.markdown(href, unsafe_allow_html=True)
+         # Add a button to download the modified CSV file
+        csv = df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        file_name = uploaded_file.name.replace('.csv', '_modified.csv')
+        href = f'<a href="data:file/csv;base64,{b64}" download="{file_name}">Download modified CSV file</a>'
+        st.markdown(href, unsafe_allow_html=True)
+
+
 
 if __name__ == '__main__':
     main()
