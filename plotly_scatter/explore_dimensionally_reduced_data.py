@@ -48,14 +48,14 @@ if uploaded_file is not None:
         colors = {2: 'green', 1: 'yellow',3:'red',4:'purple'}
         if category =='functional_clusters':
             fig = px.scatter(df, x='PC2_Functional', y='PC1_Functional',
-                         color=category, color_discrete_sequence=['yellow','green','purple','red'])
+                         color=category, color_discrete_sequence=['yellow','green','purple','red'], hover_data=['sample_id'])
         else:
             fig = px.scatter(df, x='PC2_Functional', y='PC1_Functional',
-                         color=category)
+                         color=category, hover_data=['sample_id'])
 
     if feature == 'taxa':
         fig = px.scatter(df, x='gUniFrac_PCoA_1', y='gUniFrac_PCoA_2',
-                             color=category, color_discrete_sequence=['yellow','green','purple','red'])
+                             color=category, hover_data=['sample_id'])
 
 
     st.plotly_chart(fig)
