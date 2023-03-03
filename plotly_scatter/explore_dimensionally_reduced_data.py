@@ -18,7 +18,7 @@ Here you can make a variaty of scatter plots based on the loadings from dementio
 * gUniFrac (feature type taxa)
 * PCA (feature type function)
 
-**If you want to look at the gUniFrac taxa clsuters select column 'cluster' and select feature type 'taxa'.**
+**If you want to look at the gUniFrac taxa clusters select column 'cluster' and select feature type 'taxa'.**
 
 **If you want to look at the PCA functional clusters select column 'functional_clusters' and select feature type 'function'.**
 
@@ -33,6 +33,7 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file, sep='\t')
 
     df2=df.copy()
+    
     #Sidebar
     st.sidebar.title("Dataset")
     file_name = uploaded_file.name
