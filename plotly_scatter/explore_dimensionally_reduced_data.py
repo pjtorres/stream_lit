@@ -10,14 +10,15 @@ import pandas as pd
 import plotly.express as px
 
 
+
 st.title("Explore Dimensionally  Reduced Data")
 
 st.markdown("""
 Here you can make a variaty of scatter plots based on the loadings from dementional reduciton approaches. Currently you have loadings from two approaches:
-* gUniFrac (species)
-* PCA (functional annotation)
+* gUniFrac (feature type taxa)
+* PCA (feature type function)
 
-**If you want to look at the gUniFrac taxa clusters select column 'cluster' and select feature type 'taxa'.**
+**If you want to look at the gUniFrac taxa clsuters select column 'cluster' and select feature type 'taxa'.**
 
 **If you want to look at the PCA functional clusters select column 'functional_clusters' and select feature type 'function'.**
 
@@ -31,12 +32,15 @@ if uploaded_file is not None:
     # Read the CSV file into a Pandas dataframe
     df = pd.read_csv(uploaded_file, sep='\t')
 
+    df2=df.copy()
     #Sidebar
     st.sidebar.title("Dataset")
     file_name = uploaded_file.name
     st.sidebar.text_input("You are using",(file_name))
     # option = st.sidebar.selectbox("which Dashboard?", (list(df.colnames)))
-    category = st.sidebar.selectbox('Select a column', df.columns)
+    df2=df2.drop(columns=['gUniFrac_PCoA_1','gUniFrac_PCoA_2','gUniFrac_PCoA_3',
+    'PC1_Functional','PC2_Functional'])
+    category = st.sidebar.selectbox('Select a column', df2.columns)
     feature = st.sidebar.selectbox('Select feature type', ('taxa','function'))
 
 
