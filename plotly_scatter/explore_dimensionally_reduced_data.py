@@ -9,11 +9,6 @@ import base64
 import pandas as pd
 import plotly.express as px
 
-"""
-Once you dimentionally reduce your data you can save the component loadings. These loadings are simply columns of data which can be
-merged with any mapping file you have. Using this combined information now gives you the ability  to explore the dimentionaly Reduced
-data and change the colors to represent any category you want. 
-"""
 
 st.title("Explore Dimensionally  Reduced Data")
 
