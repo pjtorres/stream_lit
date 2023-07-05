@@ -6,10 +6,10 @@ Created on 07-05-2023
 import streamlit as st
 import pandas as pd
 import base64
-import tkinter as tk
+# import tkinter as tk
 import csv
-from tkinter import ttk
-from tkinter.messagebox import showinfo
+# from tkinter import ttk
+# from tkinter.messagebox import showinfo
 import itertools
 
 
