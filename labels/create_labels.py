@@ -54,7 +54,7 @@ start_value = st.number_input("Enter Sample Start Value", value=start_value)
 end_value = st.number_input("Enter Sample End Value", value=end_value)
 
 # Run analysis button
-if st.button("Run Analysis"):
+if st.button("Make Labels"):
     # Perform analysis based on the selected analysis type
     if analysis_type == 'Argonaut Blood for Crown':
         # Code for Analysis 1
