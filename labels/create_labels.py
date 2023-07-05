@@ -6,7 +6,6 @@ Created on 07-05-2023
 import streamlit as st
 import pandas as pd
 import base64
-import plotly.express as px
 import tkinter as tk
 import csv
 from tkinter import ttk
