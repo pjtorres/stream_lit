@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import base64
 import pandas as pd
-import plotly.express as px
 import csv
 
 import itertools
