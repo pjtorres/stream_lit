@@ -55,8 +55,8 @@ If not needed leave as is. Should only need an input value when dealing with `Ar
 analysis_type = st.selectbox("Select Labeling Type", analysis_options)
 
 # Numeric input for start and end values
-start_value = st.number_input("Enter Patient ID Start Numbe", value=start_value)
-end_value = st.number_input("Enter Patient ID End Numbe", value=end_value)
+start_value = st.number_input("Enter Patient ID Start Number", value=start_value)
+end_value = st.number_input("Enter Patient ID End Number", value=end_value)
 site_value = st.number_input("Enter Site Value (If not needed leave as is)", value=0)
 # Run analysis button
 if st.button("Run Analysis"):
