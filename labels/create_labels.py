@@ -6,12 +6,13 @@ Created on 07-05-2023
 import streamlit as st
 import pandas as pd
 import base64
-# import tkinter as tk
+import pandas as pd
+import plotly.express as px
 import csv
-# from tkinter import ttk
-# from tkinter.messagebox import showinfo
+
 import itertools
 
+import pandas as pd
 
 
 
@@ -25,6 +26,8 @@ analysis_options = ['Argonaut Blood for Crown', 'Argonaut Fecal', 'Argonaut Tiss
 # Numerical start and end values
 start_value = 0
 end_value = 0
+site_value = 0
+
 
 st.title("Label Maker")
 
@@ -44,17 +47,20 @@ Blood labels for Crown Bio
 ## Poo Kit Labels
 Labels for our in-house poo kits
 
+## Site values
+If not needed leave as is. Should only need an input value when dealing with `Argonaut Tissue-low-high_risk` or `Argonaut Tissue-CRC`.
+
 """)
 
 # Dropdown for labeling type
 analysis_type = st.selectbox("Select Labeling Type", analysis_options)
 
 # Numeric input for start and end values
-start_value = st.number_input("Enter Sample Start Value", value=start_value)
-end_value = st.number_input("Enter Sample End Value", value=end_value)
-
+start_value = st.number_input("Enter Patient ID Start Numbe", value=start_value)
+end_value = st.number_input("Enter Patient ID End Numbe", value=end_value)
+site_value = st.number_input("Enter Site Value (If not needed leave as is)", value=0)
 # Run analysis button
-if st.button("Make Labels"):
+if st.button("Run Analysis"):
     # Perform analysis based on the selected analysis type
     if analysis_type == 'Argonaut Blood for Crown':
         # Code for Analysis 1
@@ -287,12 +293,15 @@ if st.button("Make Labels"):
 
     elif analysis_type == 'Argonaut Tissue-CRC':
         # Code for Analysis 3
+        # site_value = st.number_input("Enter Site  Value", value=site_value)
         st.write("Running Argonaut Tissue-CRC...")
         st.write(f"Start Value: {start_value}")
         st.write(f"End Value: {end_value}")
+        st.write(f"Site Value: {site_value}")
+
 
         #Enter Start and End PBT numbers (numbers only)
-        site = "09"
+        site = site_value
 
 
         patient_start = start_value
@@ -356,7 +365,7 @@ if st.button("Make Labels"):
 
         lab_pbt = []
         for value in num_tot_list:
-            pbt = site + '-' + f'{value}'
+            pbt = f'{site}' + '-' + f'{value}'
             lab_pbt.append(pbt)
 
 
@@ -407,9 +416,10 @@ if st.button("Make Labels"):
         st.write("Running Argonaut Tissue-low-high_risk...")
         st.write(f"Start Value: {start_value}")
         st.write(f"End Value: {end_value}")
+        st.write(f"Site Value: {site_value}")
 
         #Enter Start and End PBT numbers (numbers only)
-        site = "14"
+        site = site_value
 
 
         patient_start = start_value
@@ -482,7 +492,7 @@ if st.button("Make Labels"):
 
         lab_pbt = []
         for value in num_tot_list:
-            pbt = site + '-' + f'{value}'
+            pbt =  f'{site}'  + '-' + f'{value}'
             lab_pbt.append(pbt)
 
 
