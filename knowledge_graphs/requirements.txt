@@ -1,0 +1,9 @@
+fuzzywuzzy==0.18.0
+pandas==1.4.2
+networkx==3.2.1
+pyvis==0.3.2
+python-louvain==0.16  # Correct package for community_louvain
+spacy==3.8.2
+#streamlit==1.24.0
+#matplotlib==3.7.3
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz
