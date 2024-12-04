@@ -1,6 +1,6 @@
 fuzzywuzzy==0.18.0
 numpy==1.26.4
-pandas==1.4.2
+#pandas==1.4.2
 networkx==3.2.1
 pyvis==0.3.2
 python-louvain==0.16  # Correct package for community_louvain
