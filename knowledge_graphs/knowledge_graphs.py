@@ -580,7 +580,369 @@ if uploaded_file is not None:
                 ax.set_title('Top Relationship Types')
                 st.pyplot(fig)
                 
-        # ... [Rest of the analysis modes remain the same] ...
+        elif analysis_mode == "Target Discovery":
+            st.header("🎯 Intelligent Target Discovery")
+            
+            st.markdown("""
+            **Identify potential targets based on network proximity and relationship patterns.**
+            """)
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                st.subheader("🔍 Search Parameters")
+                
+                # Seed node selection
+                all_nodes = list(G.nodes())
+                seed_input = st.text_input("Enter seed nodes (comma-separated):", 
+                                         placeholder="e.g., Bifidobacterium, Probiotic")
+                
+                if seed_input:
+                    seed_nodes = [node.strip() for node in seed_input.split(',')]
+                    # Fuzzy matching for seed nodes
+                    matched_seeds = []
+                    for seed in seed_nodes:
+                        matches = process.extractOne(seed, all_nodes)
+                        if matches and matches[1] > 70:  # 70% similarity threshold
+                            matched_seeds.append(matches[0])
+                    
+                    if matched_seeds:
+                        st.success(f"Found matches: {', '.join(matched_seeds)}")
+                        
+                        # Relation type filter
+                        all_relations = data['relation'].unique().tolist()
+                        selected_relations = st.multiselect(
+                            "Filter by relationship types:",
+                            all_relations,
+                            help="Leave empty to include all relationship types"
+                        )
+                        
+                        min_connections = st.slider("Minimum connections:", 1, 10, 2)
+                        
+                        # Find targets
+                        if st.button("🎯 Discover Targets"):
+                            targets = analytics.find_potential_targets(
+                                matched_seeds, 
+                                selected_relations if selected_relations else None,
+                                min_connections
+                            )
+                            
+                            if targets:
+                                st.session_state['discovered_targets'] = targets
+                            else:
+                                st.warning("No targets found with current parameters")
+                    else:
+                        st.error("No matching nodes found. Try different spelling or check available nodes.")
+            
+            with col2:
+                if 'discovered_targets' in st.session_state:
+                    st.subheader("🎯 Discovered Targets")
+                    targets = st.session_state['discovered_targets']
+                    
+                    target_df = pd.DataFrame([
+                        {
+                            'Target': target,
+                            'PageRank': f"{data['pagerank']:.4f}",
+                            'Degree': data['degree'],
+                            'Community': data['community'],
+                            'Key Relations': ', '.join(data['connecting_relations'][:3])
+                        }
+                        for target, data in targets[:20]
+                    ])
+                    
+                    st.dataframe(target_df, use_container_width=True)
+                    
+                    # Visualize top targets
+                    if len(targets) > 0:
+                        st.subheader("📊 Target Ranking Visualization")
+                        top_10_targets = targets[:10]
+                        
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        target_names = [t[0] for t in top_10_targets]
+                        scores = [t[1]['pagerank'] * t[1]['degree'] for t in top_10_targets]
+                        
+                        ax.barh(target_names, scores)
+                        ax.set_xlabel('Combined Score (PageRank × Degree)')
+                        ax.set_title('Top Target Candidates')
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                else:
+                    st.info("Enter seed nodes and click 'Discover Targets' to find potential targets.")
+        
+        elif analysis_mode == "Community Analysis":
+            st.header("🏘️ Community Analysis")
+            
+            if partition:
+                community_stats = analytics.community_analysis()
+                
+                st.subheader("📈 Community Overview")
+                
+                # Community summary table
+                summary_data = []
+                for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
+                    summary_data.append({
+                        'Community': comm_id,
+                        'Size': stats['size'],
+                        'Internal Edges': stats['internal_edges'],
+                        'External Edges': stats['external_edges'],
+                        'Avg Centrality': f"{stats['avg_centrality']:.4f}",
+                        'Top Relations': ', '.join([rel for rel, count in stats['key_relations'].most_common(3)])
+                    })
+                
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True)
+                
+                # Community size distribution
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("📊 Community Size Distribution")
+                    sizes = [stats['size'] for stats in community_stats.values()]
+                    
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    ax.hist(sizes, bins=min(10, len(set(sizes))), edgecolor='black')
+                    ax.set_xlabel('Community Size')
+                    ax.set_ylabel('Frequency')
+                    ax.set_title('Distribution of Community Sizes')
+                    st.pyplot(fig)
+                
+                with col2:
+                    st.subheader("🔗 Internal vs External Connections")
+                    
+                    internal_edges = [stats['internal_edges'] for stats in community_stats.values()]
+                    external_edges = [stats['external_edges'] for stats in community_stats.values()]
+                    
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    communities = list(community_stats.keys())
+                    
+                    x = np.arange(len(communities))
+                    width = 0.35
+                    
+                    ax.bar(x - width/2, internal_edges, width, label='Internal Edges')
+                    ax.bar(x + width/2, external_edges, width, label='External Edges')
+                    
+                    ax.set_xlabel('Community')
+                    ax.set_ylabel('Number of Edges')
+                    ax.set_title('Internal vs External Connections by Community')
+                    ax.set_xticks(x)
+                    ax.set_xticklabels(communities)
+                    ax.legend()
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                
+                # Detailed community analysis
+                st.subheader("🔍 Detailed Community Analysis")
+                selected_comm = st.selectbox(
+                    "Select community for detailed analysis:",
+                    options=list(community_stats.keys()),
+                    format_func=lambda x: f"Community {x} ({community_stats[x]['size']} nodes)"
+                )
+                
+                if selected_comm is not None:
+                    stats = community_stats[selected_comm]
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write("**Community Members:**")
+                        members_df = pd.DataFrame({
+                            'Node': stats['nodes'],
+                            'Centrality': [analytics.node_attributes[node]['pagerank'] for node in stats['nodes']]
+                        }).sort_values('Centrality', ascending=False)
+                        st.dataframe(members_df, use_container_width=True)
+                    
+                    with col2:
+                        st.write("**Relationship Types:**")
+                        relations_df = pd.DataFrame([
+                            {'Relation': rel, 'Count': count}
+                            for rel, count in stats['key_relations'].most_common(10)
+                        ])
+                        st.dataframe(relations_df, use_container_width=True)
+                        
+                        # Relationship pie chart
+                        if len(relations_df) > 0:
+                            fig, ax = plt.subplots(figsize=(8, 6))
+                            ax.pie(relations_df['Count'], labels=relations_df['Relation'], autopct='%1.1f%%')
+                            ax.set_title(f'Relationship Types in Community {selected_comm}')
+                            st.pyplot(fig)
+            else:
+                st.warning("Community detection not available. Enable 'Color by Communities' in the sidebar.")
+        
+        elif analysis_mode == "Relationship Patterns":
+            st.header("🔗 Relationship Pattern Analysis")
+            
+            relation_stats = analytics.analyze_relationship_patterns()
+            
+            st.subheader("📊 Relationship Statistics")
+            
+            # Enhanced relationship analysis
+            enhanced_stats = []
+            for relation, stats in relation_stats.items():
+                # Find nodes most associated with this relation
+                relation_data = data[data['relation'] == relation]
+                all_nodes_in_relation = list(relation_data['head']) + list(relation_data['tail'])
+                node_counts = Counter(all_nodes_in_relation)
+                top_nodes = node_counts.most_common(3)
+                
+                enhanced_stats.append({
+                    'Relation': relation,
+                    'Frequency': stats['frequency'],
+                    'Unique Nodes': stats['unique_nodes'],
+                    'Density': f"{stats['density']:.3f}",
+                    'Top Nodes': ', '.join([f"{node}({count})" for node, count in top_nodes])
+                })
+            
+            enhanced_df = pd.DataFrame(enhanced_stats).sort_values('Frequency', ascending=False)
+            st.dataframe(enhanced_df, use_container_width=True)
+            
+            # Relationship network analysis
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("📈 Relationship Frequency")
+                
+                top_relations = enhanced_df.head(10)
+                fig, ax = plt.subplots(figsize=(10, 8))
+                ax.barh(top_relations['Relation'], top_relations['Frequency'])
+                ax.set_xlabel('Frequency')
+                ax.set_title('Most Common Relationship Types')
+                plt.tight_layout()
+                st.pyplot(fig)
+            
+            with col2:
+                st.subheader("🎯 Relationship Density Analysis")
+                
+                fig, ax = plt.subplots(figsize=(8, 6))
+                densities = [float(d) for d in enhanced_df['Density']]
+                ax.scatter(enhanced_df['Unique Nodes'], densities, alpha=0.6)
+                ax.set_xlabel('Unique Nodes Involved')
+                ax.set_ylabel('Relationship Density')
+                ax.set_title('Relationship Density vs Node Coverage')
+                
+                # Add labels for interesting points
+                for idx, row in enhanced_df.iterrows():
+                    if float(row['Density']) > 0.1 or row['Unique Nodes'] > enhanced_df['Unique Nodes'].mean():
+                        ax.annotate(row['Relation'], 
+                                  (row['Unique Nodes'], float(row['Density'])),
+                                  xytext=(5, 5), textcoords='offset points',
+                                  fontsize=8, alpha=0.7)
+                
+                st.pyplot(fig)
+            
+            # Relationship co-occurrence analysis
+            st.subheader("🔄 Relationship Co-occurrence")
+            
+            # Find nodes that participate in multiple relationship types
+            node_relations = defaultdict(set)
+            for _, row in data.iterrows():
+                node_relations[row['head']].add(row['relation'])
+                node_relations[row['tail']].add(row['relation'])
+            
+            multi_relation_nodes = {node: list(relations) 
+                                  for node, relations in node_relations.items() 
+                                  if len(relations) > 1}
+            
+            if multi_relation_nodes:
+                # Show nodes with most diverse relationships
+                diverse_nodes = sorted(multi_relation_nodes.items(), 
+                                     key=lambda x: len(x[1]), reverse=True)[:10]
+                
+                diverse_df = pd.DataFrame([
+                    {
+                        'Node': node,
+                        'Relationship Count': len(relations),
+                        'Relationship Types': ', '.join(relations)
+                    }
+                    for node, relations in diverse_nodes
+                ])
+                
+                st.write("**Nodes with Most Diverse Relationships:**")
+                st.dataframe(diverse_df, use_container_width=True)
+        
+        elif analysis_mode == "Interactive Chat":
+            st.header("💬 Interactive Knowledge Graph Chat")
+            
+            st.markdown("""
+            **Ask questions about your knowledge graph and get intelligent answers based on network analysis.**
+            """)
+            
+            # Initialize chat history
+            if 'chat_history' not in st.session_state:
+                st.session_state.chat_history = []
+            
+            # Chat interface
+            user_question = st.text_input("Ask a question about your knowledge graph:", 
+                                        placeholder="e.g., What are the most important nodes? Which communities are most connected?")
+            
+            if st.button("🚀 Ask") and user_question:
+                # Simple question processing
+                question_lower = user_question.lower()
+                response = ""
+                
+                # Hub/important nodes questions
+                if any(keyword in question_lower for keyword in ['important', 'hub', 'central', 'key']):
+                    hubs = analytics.identify_hub_nodes(5)
+                    response = f"The most important/central nodes in your graph are: {', '.join([hub[0] for hub in hubs[:5]])}. These nodes have high centrality scores and are well-connected to other parts of the network."
+                
+                # Community questions
+                elif any(keyword in question_lower for keyword in ['community', 'cluster', 'group']):
+                    if partition:
+                        community_stats = analytics.community_analysis()
+                        largest_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:3]
+                        response = f"Your graph has {len(community_stats)} communities. The largest communities are: " + \
+                                 ", ".join([f"Community {comm} ({stats['size']} nodes)" for comm, stats in largest_communities])
+                    else:
+                        response = "Community detection is not enabled. Please enable 'Color by Communities' in the sidebar to analyze communities."
+                
+                # Bridge nodes questions
+                elif any(keyword in question_lower for keyword in ['bridge', 'connect', 'between']):
+                    bridges = analytics.find_bridge_nodes()
+                    if bridges:
+                        top_bridges = bridges[:3]
+                        response = f"The main bridge nodes that connect different communities are: {', '.join([bridge['node'] for bridge in top_bridges])}. These nodes are crucial for information flow between different parts of the network."
+                    else:
+                        response = "No bridge nodes identified. This might mean your graph is very well connected or community detection needs to be enabled."
+                
+                # Relationship questions
+                elif any(keyword in question_lower for keyword in ['relation', 'connection', 'edge']):
+                    relation_stats = analytics.analyze_relationship_patterns()
+                    top_relations = sorted(relation_stats.items(), key=lambda x: x[1]['frequency'], reverse=True)[:3]
+                    response = f"The most common relationships in your graph are: " + \
+                             ", ".join([f"{rel} ({stats['frequency']} occurrences)" for rel, stats in top_relations])
+                
+                # Target/recommendation questions
+                elif any(keyword in question_lower for keyword in ['target', 'recommend', 'suggest', 'find']):
+                    response = "To find targets or recommendations, please use the 'Target Discovery' mode and specify seed nodes you're interested in. I can then analyze the network to suggest related nodes based on proximity and relationships."
+                
+                # Size/scale questions
+                elif any(keyword in question_lower for keyword in ['size', 'big', 'large', 'how many']):
+                    response = f"Your knowledge graph contains {len(G.nodes())} nodes and {len(G.edges())} edges. The average degree (connections per node) is {np.mean([G.degree(n) for n in G.nodes()]):.1f}."
+                
+                # Default response
+                else:
+                    response = "I can help you analyze your knowledge graph! Try asking about:\n\n" + \
+                             "• Important or central nodes\n" + \
+                             "• Communities and clusters\n" + \
+                             "• Bridge nodes and connections\n" + \
+                             "• Relationship patterns\n" + \
+                             "• Graph size and statistics\n\n" + \
+                             "Or use the specific analysis modes for more detailed insights."
+                
+                # Add to chat history
+                st.session_state.chat_history.append({"question": user_question, "response": response})
+            
+            # Display chat history
+            if st.session_state.chat_history:
+                st.subheader("💬 Chat History")
+                for i, chat in enumerate(reversed(st.session_state.chat_history)):
+                    with st.expander(f"Q: {chat['question']}", expanded=(i==0)):
+                        st.write(f"**A:** {chat['response']}")
+                
+                # Clear chat history button
+                if st.button("🗑️ Clear Chat History"):
+                    st.session_state.chat_history = []
+                    st.experimental_rerun()
                 
     else:
         st.error(f"Please ensure your file contains columns: {', '.join(required_columns)}")
