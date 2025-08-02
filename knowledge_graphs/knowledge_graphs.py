@@ -487,13 +487,10 @@ if uploaded_file is not None:
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        # FIXED Community selection logic with proper ID tracking
+        # COMPLETELY FIXED Community selection with button-based approach
         if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus")
             community_stats = analytics.community_analysis()
-            
-            # Debug: Show what's in session state
-            st.sidebar.write(f"Debug: Current focus = {st.session_state.focus_community}")
             
             # Create stable community mapping using actual community IDs
             community_data = []
@@ -503,54 +500,13 @@ if uploaded_file is not None:
                     community_data.append({
                         'id': comm_id,
                         'representative': representative,
-                        'size': stats['size'],
-                        'display_name': f"Community {comm_id}: {representative} ({stats['size']} nodes)"
+                        'size': stats['size']
                     })
             
             # Sort by size
             community_data.sort(key=lambda x: x['size'], reverse=True)
             
-            # Create options list with "All" as first option
-            options = ["All Communities (Full Graph)"] + [item['display_name'] for item in community_data]
-            
-            # Find current selection index based on stored community ID
-            current_index = 0
-            if st.session_state.focus_community is not None:
-                for i, item in enumerate(community_data):
-                    if item['id'] == st.session_state.focus_community:
-                        current_index = i + 1  # +1 because "All" is at index 0
-                        break
-            
-            st.sidebar.write(f"Debug: Current index = {current_index}")
-            
-            # Community selection
-            selected_option = st.sidebar.selectbox(
-                "Focus on specific community:",
-                options,
-                index=current_index,
-                key="community_selector"
-            )
-            
-            st.sidebar.write(f"Debug: Selected = {selected_option}")
-            
-            # Determine new focus community ID
-            new_focus = None
-            if selected_option != "All Communities (Full Graph)":
-                # Find the community ID for the selected option
-                for item in community_data:
-                    if item['display_name'] == selected_option:
-                        new_focus = item['id']
-                        break
-            
-            st.sidebar.write(f"Debug: New focus = {new_focus}")
-            
-            # Only update if changed to prevent unnecessary reruns
-            if new_focus != st.session_state.focus_community:
-                st.sidebar.write(f"Debug: Updating focus from {st.session_state.focus_community} to {new_focus}")
-                st.session_state.focus_community = new_focus
-                st.rerun()
-            
-            # Show current focus info
+            # Show current focus status
             if st.session_state.focus_community is not None:
                 current_item = None
                 for item in community_data:
@@ -559,11 +515,80 @@ if uploaded_file is not None:
                         break
                 
                 if current_item:
-                    st.sidebar.success(f"✅ Focused on: {current_item['representative']}")
+                    st.sidebar.success(f"✅ Currently focused on:\n**{current_item['representative']}**")
                     stats = community_stats[st.session_state.focus_community]
-                    st.sidebar.info(f"Nodes: {stats['size']} | Edges: {stats['internal_edges']}")
+                    st.sidebar.info(f"Community {st.session_state.focus_community}: {stats['size']} nodes, {stats['internal_edges']} internal edges")
+                    
+                    # Reset button
+                    if st.sidebar.button("🔄 Show Full Network", key="reset_to_full"):
+                        st.session_state.focus_community = None
+                        st.rerun()
                 else:
                     st.sidebar.error(f"❌ Community {st.session_state.focus_community} not found!")
+            else:
+                st.sidebar.info("📊 Currently showing full network")
+            
+            st.sidebar.markdown("---")
+            st.sidebar.write("**Select Community to Focus:**")
+            
+            # Create community focus buttons
+            cols_per_row = 1
+            for i in range(0, len(community_data), cols_per_row):
+                chunk = community_data[i:i + cols_per_row]
+                cols = st.sidebar.columns(len(chunk))
+                
+                for j, item in enumerate(chunk):
+                    with cols[j]:
+                        # Show current selection state
+                        is_current = st.session_state.focus_community == item['id']
+                        
+                        button_text = f"{'🎯' if is_current else '📍'} {item['representative']}\n({item['size']} nodes)"
+                        button_type = "primary" if is_current else "secondary"
+                        
+                        if st.button(
+                            button_text, 
+                            key=f"focus_comm_{item['id']}", 
+                            type=button_type,
+                            use_container_width=True,
+                            disabled=is_current
+                        ):
+                            st.session_state.focus_community = item['id']
+                            st.rerun()
+            
+            # Alternative: Simple selectbox as backup (no automatic rerun)
+            st.sidebar.markdown("---")
+            st.sidebar.write("**Or use dropdown:**")
+            
+            # Create options
+            options = ["All Communities"] + [f"{item['representative']} ({item['size']} nodes)" for item in community_data]
+            
+            # Find current index
+            current_index = 0
+            if st.session_state.focus_community is not None:
+                for i, item in enumerate(community_data):
+                    if item['id'] == st.session_state.focus_community:
+                        current_index = i + 1
+                        break
+            
+            selected_idx = st.sidebar.selectbox(
+                "Community:",
+                range(len(options)),
+                format_func=lambda x: options[x],
+                index=current_index,
+                key="community_dropdown",
+                label_visibility="collapsed"
+            )
+            
+            # Manual apply button for selectbox
+            if st.sidebar.button("Apply Selection", key="apply_selection"):
+                if selected_idx == 0:
+                    new_focus = None
+                else:
+                    new_focus = community_data[selected_idx - 1]['id']
+                
+                if new_focus != st.session_state.focus_community:
+                    st.session_state.focus_community = new_focus
+                    st.rerun()
         
         # Generate graph with current focus
         G, net, partition = generate_graph(
