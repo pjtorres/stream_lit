@@ -284,15 +284,15 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     if graph_size == "extra_large":
         height, width = "900px", "100%"
         physics_distance = 150
-        node_base_size = 35
+        node_base_size = 25  # Reduced from 35
     elif graph_size == "large":
         height, width = "750px", "100%"
         physics_distance = 120
-        node_base_size = 30
+        node_base_size = 20  # Reduced from 30
     else:  # medium
         height, width = "600px", "100%"
         physics_distance = 100
-        node_base_size = 25
+        node_base_size = 15  # Reduced from 25
 
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
@@ -378,13 +378,13 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         
         # Calculate node size
         if centrality:
-            node_size = (centrality[node] * 150 + node_base_size)
+            node_size = (centrality[node] * 80 + node_base_size)  # Reduced multiplier from 150 to 80
         else:
             node_size = node_base_size
             
         # Make focused community nodes larger
         if focus_community is not None and partition and partition[node] == focus_community:
-            node_size *= 1.3
+            node_size *= 1.2  # Reduced from 1.3
         
         # Create detailed tooltip
         title = f"<b>{node}</b>"
