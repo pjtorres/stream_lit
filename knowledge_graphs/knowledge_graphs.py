@@ -487,61 +487,83 @@ if uploaded_file is not None:
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        # FIXED Community selection logic
+        # FIXED Community selection logic with proper ID tracking
         if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus")
             community_stats = analytics.community_analysis()
             
-            # Create community options with proper mapping
-            community_options = ["All Communities (Full Graph)"]
-            community_mapping = {}  # Maps display name to community ID
+            # Debug: Show what's in session state
+            st.sidebar.write(f"Debug: Current focus = {st.session_state.focus_community}")
             
-            # Sort communities by size
-            sorted_communities = sorted(community_stats.items(), 
-                                      key=lambda x: x[1]['size'], 
-                                      reverse=True)
-            
-            for comm_id, stats in sorted_communities:
+            # Create stable community mapping using actual community IDs
+            community_data = []
+            for comm_id, stats in community_stats.items():
                 if stats['nodes']:
-                    # Find most connected node as representative
                     representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
-                    display_name = f"{representative} ({stats['size']} nodes)"
-                    community_options.append(display_name)
-                    community_mapping[display_name] = comm_id
+                    community_data.append({
+                        'id': comm_id,
+                        'representative': representative,
+                        'size': stats['size'],
+                        'display_name': f"Community {comm_id}: {representative} ({stats['size']} nodes)"
+                    })
             
-            # Find current selection index
+            # Sort by size
+            community_data.sort(key=lambda x: x['size'], reverse=True)
+            
+            # Create options list with "All" as first option
+            options = ["All Communities (Full Graph)"] + [item['display_name'] for item in community_data]
+            
+            # Find current selection index based on stored community ID
             current_index = 0
             if st.session_state.focus_community is not None:
-                for i, option in enumerate(community_options[1:], 1):
-                    if community_mapping[option] == st.session_state.focus_community:
-                        current_index = i
+                for i, item in enumerate(community_data):
+                    if item['id'] == st.session_state.focus_community:
+                        current_index = i + 1  # +1 because "All" is at index 0
                         break
+            
+            st.sidebar.write(f"Debug: Current index = {current_index}")
             
             # Community selection
             selected_option = st.sidebar.selectbox(
                 "Focus on specific community:",
-                community_options,
+                options,
                 index=current_index,
                 key="community_selector"
             )
             
-            # Update focus community based on selection
-            if selected_option == "All Communities (Full Graph)":
-                new_focus = None
-            else:
-                new_focus = community_mapping[selected_option]
+            st.sidebar.write(f"Debug: Selected = {selected_option}")
+            
+            # Determine new focus community ID
+            new_focus = None
+            if selected_option != "All Communities (Full Graph)":
+                # Find the community ID for the selected option
+                for item in community_data:
+                    if item['display_name'] == selected_option:
+                        new_focus = item['id']
+                        break
+            
+            st.sidebar.write(f"Debug: New focus = {new_focus}")
             
             # Only update if changed to prevent unnecessary reruns
             if new_focus != st.session_state.focus_community:
+                st.sidebar.write(f"Debug: Updating focus from {st.session_state.focus_community} to {new_focus}")
                 st.session_state.focus_community = new_focus
                 st.rerun()
             
             # Show current focus info
             if st.session_state.focus_community is not None:
-                stats = community_stats[st.session_state.focus_community]
-                representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
-                st.sidebar.success(f"✅ Focused on: {representative}")
-                st.sidebar.info(f"Nodes: {stats['size']} | Edges: {stats['internal_edges']}")
+                current_item = None
+                for item in community_data:
+                    if item['id'] == st.session_state.focus_community:
+                        current_item = item
+                        break
+                
+                if current_item:
+                    st.sidebar.success(f"✅ Focused on: {current_item['representative']}")
+                    stats = community_stats[st.session_state.focus_community]
+                    st.sidebar.info(f"Nodes: {stats['size']} | Edges: {stats['internal_edges']}")
+                else:
+                    st.sidebar.error(f"❌ Community {st.session_state.focus_community} not found!")
         
         # Generate graph with current focus
         G, net, partition = generate_graph(
