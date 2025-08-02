@@ -274,7 +274,6 @@ with st.sidebar:
         )
 
 # Function to generate the graph (enhanced with community filtering)
-@st.cache_data
 def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, graph_size="large"):
     G = nx.Graph()
     for _, row in data.iterrows():
@@ -591,10 +590,13 @@ if uploaded_file is not None:
             with col2:
                 # Simple pie chart with matplotlib
                 top_relations = relation_df.head(8)
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
-                ax.set_title('Top Relationship Types')
-                st.pyplot(fig)
+                if len(top_relations) > 0:
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
+                    ax.set_title('Top Relationship Types')
+                    st.pyplot(fig)
+                else:
+                    st.info("No relationship data to display")
             with col1:
                 st.dataframe(relation_df, use_container_width=True)
             with col2:
