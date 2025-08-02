@@ -581,93 +581,106 @@ if uploaded_file is not None:
                 st.pyplot(fig)
                 
         elif analysis_mode == "Target Discovery":
-            st.header("🎯 Intelligent Target Discovery")
+            st.header("🎯 Target Discovery Engine")
             
             st.markdown("""
-            **Identify potential targets based on network proximity and relationship patterns.**
+            **Find potential therapeutic targets based on network proximity and centrality measures.**
+            Enter seed nodes (e.g., 'Bifidobacterium', 'B. infantis') to discover related targets.
             """)
             
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                st.subheader("🔍 Search Parameters")
+                seed_input = st.text_input(
+                    "Enter seed nodes (comma-separated):",
+                    placeholder="Bifidobacterium, B. infantis, probiotic"
+                )
                 
-                # Seed node selection
-                all_nodes = list(G.nodes())
-                seed_input = st.text_input("Enter seed nodes (comma-separated):", 
-                                         placeholder="e.g., Bifidobacterium, Probiotic")
-                
-                if seed_input:
-                    seed_nodes = [node.strip() for node in seed_input.split(',')]
-                    # Fuzzy matching for seed nodes
-                    matched_seeds = []
-                    for seed in seed_nodes:
-                        matches = process.extractOne(seed, all_nodes)
-                        if matches and matches[1] > 70:  # 70% similarity threshold
-                            matched_seeds.append(matches[0])
-                    
-                    if matched_seeds:
-                        st.success(f"Found matches: {', '.join(matched_seeds)}")
-                        
-                        # Relation type filter
-                        all_relations = data['relation'].unique().tolist()
-                        selected_relations = st.multiselect(
-                            "Filter by relationship types:",
-                            all_relations,
-                            help="Leave empty to include all relationship types"
-                        )
-                        
-                        min_connections = st.slider("Minimum connections:", 1, 10, 2)
-                        
-                        # Find targets
-                        if st.button("🎯 Discover Targets"):
-                            targets = analytics.find_potential_targets(
-                                matched_seeds, 
-                                selected_relations if selected_relations else None,
-                                min_connections
-                            )
-                            
-                            if targets:
-                                st.session_state['discovered_targets'] = targets
-                            else:
-                                st.warning("No targets found with current parameters")
-                    else:
-                        st.error("No matching nodes found. Try different spelling or check available nodes.")
-            
             with col2:
-                if 'discovered_targets' in st.session_state:
-                    st.subheader("🎯 Discovered Targets")
-                    targets = st.session_state['discovered_targets']
+                min_connections = st.slider("Minimum connections:", 1, 10, 2)
+            
+            # Relation type filter
+            all_relations = list(set(data['relation'].values))
+            selected_relations = st.multiselect(
+                "Filter by relationship types (optional):",
+                all_relations,
+                help="Leave empty to include all relationship types"
+            )
+            
+            if seed_input:
+                seed_nodes = [node.strip() for node in seed_input.split(',')]
+                
+                # Fuzzy match seed nodes to actual graph nodes
+                matched_seeds = []
+                for seed in seed_nodes:
+                    matches = process.extract(seed.lower(), 
+                                            [n.lower() for n in G.nodes()], 
+                                            limit=3)
+                    if matches and matches[0][1] > 60:  # 60% similarity threshold
+                        original_node = [n for n in G.nodes() if n.lower() == matches[0][0]][0]
+                        matched_seeds.append(original_node)
+                        st.success(f"Matched '{seed}' to '{original_node}'")
+                    else:
+                        st.warning(f"No close match found for '{seed}'")
+                
+                if matched_seeds:
+                    # Find potential targets
+                    targets = analytics.find_potential_targets(
+                        matched_seeds, 
+                        selected_relations if selected_relations else None,
+                        min_connections
+                    )
                     
-                    target_df = pd.DataFrame([
-                        {
-                            'Target': target,
-                            'PageRank': f"{target_data['pagerank']:.4f}",
-                            'Degree': data['degree'],
-                            'Community': data['community'],
-                            'Key Relations': ', '.join(data['connecting_relations'][:3])
-                        }
-                        for target, data in targets[:20]
-                    ])
-                    
-                    st.dataframe(target_df, use_container_width=True)
-                    
-                    # Visualize top targets
-                    if len(targets) > 0:
-                        st.subheader("📊 Target Ranking Visualization")
-                        top_10_targets = targets[:10]
+                    if targets:
+                        st.subheader(f"🎯 Top Potential Targets (Found {len(targets)})")
                         
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        target_names = [t[0] for t in top_10_targets]
-                        scores = [t[1]['pagerank'] * t[1]['degree'] for t in top_10_targets]
+                        # Create detailed results
+                        target_results = []
+                        for target, scores in targets[:20]:  # Top 20
+                            target_results.append({
+                                'Target': target,
+                                'PageRank': f"{scores['pagerank']:.4f}",
+                                'Degree': scores['degree'],
+                                'Betweenness': f"{scores['betweenness']:.4f}",
+                                'Community': scores['community'],
+                                'Key Relations': ', '.join(scores['connecting_relations'][:3])
+                            })
                         
-                        ax.barh(target_names, scores)
-                        ax.set_xlabel('Combined Score (PageRank × Degree)')
-                        ax.set_title('Top Target Candidates')
+                        target_df = pd.DataFrame(target_results)
+                        st.dataframe(target_df, use_container_width=True)
+                        
+                        # Visualize top targets with matplotlib
+                        top_targets = targets[:10]
+                        
+                        fig, ax = plt.subplots(figsize=(10, 8))
+                        
+                        x_vals = [t[1]['pagerank'] for t in top_targets]
+                        y_vals = [t[1]['degree'] for t in top_targets]
+                        sizes = [t[1]['betweenness'] * 1000 + 50 for t in top_targets]
+                        colors = [t[1]['community'] for t in top_targets]
+                        
+                        scatter = ax.scatter(x_vals, y_vals, s=sizes, c=colors, 
+                                           cmap='viridis', alpha=0.7, edgecolors='black')
+                        
+                        # Add labels for top targets
+                        for i, (target, _) in enumerate(top_targets):
+                            label = target[:15] + '...' if len(target) > 15 else target
+                            ax.annotate(label, (x_vals[i], y_vals[i]), 
+                                      xytext=(5, 5), textcoords='offset points', 
+                                      fontsize=8, alpha=0.8)
+                        
+                        ax.set_xlabel('PageRank Score')
+                        ax.set_ylabel('Node Degree')
+                        ax.set_title('Potential Targets: PageRank vs Degree (Size = Betweenness)')
+                        
+                        # Add colorbar
+                        cbar = plt.colorbar(scatter)
+                        cbar.set_label('Community')
+                        
                         plt.tight_layout()
                         st.pyplot(fig)
-                else:
-                    st.info("Enter seed nodes and click 'Discover Targets' to find potential targets.")
+                    else:
+                        st.info("No potential targets found with the specified criteria.")
         
         elif analysis_mode == "Community Analysis":
             st.header("🏘️ Community Analysis")
