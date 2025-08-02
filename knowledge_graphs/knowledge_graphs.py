@@ -260,23 +260,30 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         
         # Get nodes in the focused community
         focus_nodes = [node for node, comm in partition.items() if comm == focus_community]
-        st.write(f"Found {len(focus_nodes)} nodes in focused community")  # Debug
+        st.write(f"📍 Found {len(focus_nodes)} nodes in community {focus_community}: {focus_nodes[:5]}...")  # Debug
         
-        # Also include directly connected nodes from other communities (1-hop neighbors)
-        extended_nodes = set(focus_nodes)
-        for node in focus_nodes:
-            for neighbor in G.neighbors(node):
-                extended_nodes.add(neighbor)
-        
-        st.write(f"Including {len(extended_nodes)} total nodes with neighbors")  # Debug
-        
-        # Create subgraph - THIS IS THE KEY FIX
-        if extended_nodes:  # Only filter if we have nodes
+        if focus_nodes:  # Only proceed if we found nodes
+            # Also include directly connected nodes from other communities (1-hop neighbors)
+            extended_nodes = set(focus_nodes)
+            for node in focus_nodes:
+                for neighbor in G.neighbors(node):
+                    extended_nodes.add(neighbor)
+            
+            st.write(f"🔗 Including {len(extended_nodes)} total nodes with neighbors")  # Debug
+            
+            # Create subgraph - THIS IS THE KEY FIX
+            original_nodes = len(G.nodes())
             G = G.subgraph(extended_nodes).copy()
+            st.write(f"✂️ Filtered graph from {original_nodes} to {len(G.nodes())} nodes")  # Debug
+            
             # Update partition for filtered graph
             partition = {node: partition[node] for node in G.nodes() if node in partition}
         else:
-            st.error(f"No nodes found for community {focus_community}")
+            st.error(f"❌ No nodes found for community {focus_community}")
+            # Don't filter if no nodes found
+    else:
+        if focus_community is not None:
+            st.write(f"⚠️ Cannot filter: partition is {partition}")  # Debug
 
     # Set visualization size with better spacing
     if graph_size == "extra_large":
@@ -540,8 +547,11 @@ if uploaded_file is not None:
                 st.sidebar.success(f"✅ Focusing on: {representative}")
                 st.sidebar.info(f"Nodes: {stats['size']} | Internal edges: {stats['internal_edges']}")
         
-        # Generate final graph with focus
+        # Generate final graph with focus - FORCE REGENERATION
+        st.write(f"🔧 Generating graph with focus_community: {focus_community}")  # Debug
         G, net, partition = generate_graph(data, color_by_community, size_by_centrality, focus_community, graph_size)
+        st.write(f"📊 Generated graph has {len(G.nodes())} nodes and {len(G.edges())} edges")  # Debug
+        
         # Update analytics with potentially filtered graph
         analytics = KnowledgeGraphAnalytics(G, data, partition)
         
@@ -593,17 +603,21 @@ if uploaded_file is not None:
             # Network visualization with focus indicator
             if focus_community is not None:
                 # Get representative name for display
-                community_stats = analytics.community_analysis() if hasattr(analytics, 'community_analysis') else {}
-                if focus_community in community_stats:
-                    stats = community_stats[focus_community]
+                community_stats_display = analytics.community_analysis() if hasattr(analytics, 'community_analysis') else {}
+                if focus_community in community_stats_display:
+                    stats = community_stats_display[focus_community]
                     representative = max(stats['nodes'], key=lambda x: G.degree(x)) if stats['nodes'] else f"Community {focus_community}"
                     st.subheader(f"🕸️ {representative} Community Focused View")
                     st.info(f"Showing {representative} Community with its direct connections. White borders indicate focused community nodes.")
+                    
+                    # Show current graph stats to verify filtering
+                    st.write(f"**Current view:** {len(G.nodes())} nodes, {len(G.edges())} edges (filtered from original graph)")
                 else:
                     st.subheader(f"🕸️ Community {focus_community} Focused View")
                     st.info(f"Showing Community {focus_community} with its direct connections. White borders indicate focused community nodes.")
             else:
                 st.subheader("🕸️ Complete Network Visualization")
+                st.write(f"**Full network:** {len(G.nodes())} nodes, {len(G.edges())} edges")
             
             # Add reset button when focused
             if focus_community is not None:
@@ -612,13 +626,34 @@ if uploaded_file is not None:
                         del st.session_state.focus_community
                     st.experimental_rerun()
             
-            net.save_graph("temp_graph.html")
-            with open("temp_graph.html", 'r') as f:
-                graph_html = f.read()
+            # Generate unique filename to prevent caching issues
+            import time
+            timestamp = int(time.time() * 1000)  # milliseconds for uniqueness
+            graph_filename = f"temp_graph_{timestamp}.html"
             
-            # Adjust height based on graph size
-            height_map = {"medium": 650, "large": 800, "extra_large": 950}
-            components.html(graph_html, height=height_map.get(graph_size, 800))
+            # Save and display graph
+            net.save_graph(graph_filename)
+            
+            try:
+                with open(graph_filename, 'r') as f:
+                    graph_html = f.read()
+                
+                # Adjust height based on graph size
+                height_map = {"medium": 650, "large": 800, "extra_large": 950}
+                components.html(graph_html, height=height_map.get(graph_size, 800))
+                
+            except FileNotFoundError:
+                st.error(f"Could not load graph file: {graph_filename}")
+            
+            # Clean up old files (optional)
+            import os
+            import glob
+            try:
+                old_files = glob.glob("temp_graph_*.html")
+                for old_file in old_files[:-5]:  # Keep only last 5 files
+                    os.remove(old_file)
+            except:
+                pass  # Ignore cleanup errors
             
             # Relationship analysis
             st.subheader("🔗 Relationship Type Analysis")
