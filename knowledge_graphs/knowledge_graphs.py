@@ -238,45 +238,72 @@ class KnowledgeGraphAnalytics:
         
         return dict(community_stats)
 
+# Streamlit App
+st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
+st.title("🧬 Advanced Knowledge Graph Analytics Platform")
+
+st.markdown("""
+**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
+""")
+
+# Sidebar for file upload and main options
+with st.sidebar:
+    st.header("📁 Data Upload")
+    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
+    
+    if uploaded_file:
+        st.header("🎨 Visualization Options")
+        color_by_community = st.checkbox("Color by Communities", value=True)
+        size_by_centrality = st.selectbox(
+            "Size nodes by:",
+            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
+            index=3
+        )
+        
+        # Graph size selector
+        graph_size = st.selectbox(
+            "Visualization size:",
+            ["medium", "large", "extra_large"],
+            index=1
+        )
+        
+        st.header("🔍 Analysis Focus")
+        analysis_mode = st.selectbox(
+            "Choose analysis type:",
+            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
+        )
+
 # Function to generate the graph (enhanced with community filtering)
+@st.cache_data
 def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, graph_size="large"):
     G = nx.Graph()
     for _, row in data.iterrows():
         G.add_edge(row['head'], row['tail'], label=row['relation'])
 
-    # Set visualization size with better spacing
+    # Set visualization size
     if graph_size == "extra_large":
         height, width = "900px", "100%"
-        physics_distance = 200  # Increased from 150
-        node_base_size = 25
-        spring_length = 300     # Increased
+        physics_distance = 150
+        node_base_size = 35
     elif graph_size == "large":
         height, width = "750px", "100%"
-        physics_distance = 160  # Increased from 120
-        node_base_size = 20
-        spring_length = 250     # Increased
+        physics_distance = 120
+        node_base_size = 30
     else:  # medium
         height, width = "600px", "100%"
-        physics_distance = 130  # Increased from 100
-        node_base_size = 15
-        spring_length = 200     # Increased
+        physics_distance = 100
+        node_base_size = 25
 
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
-    # Enhanced physics for better layout and more spread
+    # Enhanced physics for better layout
     net.set_options(f"""
     var options = {{
       "physics": {{
         "enabled": true,
-        "repulsion": {{
-          "nodeDistance": {physics_distance}, 
-          "centralGravity": 0.1,
-          "springLength": {spring_length},
-          "springConstant": 0.01,
-          "damping": 0.09
-        }},
+        "repulsion": {{"nodeDistance": {physics_distance}, "centralGravity": 0.3, "springLength": 200}},
         "solver": "repulsion",
-        "stabilization": {{"iterations": 200, "updateInterval": 25}}
+        "stabilization": {{"iterations": 150}}
       }},
       "interaction": {{
         "hover": true,
@@ -285,22 +312,15 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         "dragView": true
       }},
       "nodes": {{
-        "font": {{"size": 14, "color": "white"}},
-        "borderWidth": 2,
-        "chosen": {{
-          "node": {{
-            "label": {{"size": 18, "color": "yellow"}},
-            "color": {{"border": "yellow", "background": "rgba(255,255,0,0.3)"}}
-          }}
-        }}
+        "font": {{"size": 16, "color": "white"}},
+        "borderWidth": 2
       }},
       "edges": {{
-        "font": {{"size": 10, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
-        "smooth": {{"type": "continuous", "roundness": 0.5}},
-        "chosen": {{"edge": {{"color": "yellow", "width": 3}}}}
+        "font": {{"size": 12, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
+        "smooth": {{"type": "continuous"}}
       }}
     }}
-    """);
+    """)
 
     # Apply Louvain Community Coloring
     partition = None
@@ -358,13 +378,13 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         
         # Calculate node size
         if centrality:
-            node_size = (centrality[node] * 80 + node_base_size)  # Reduced multiplier from 150 to 80
+            node_size = (centrality[node] * 150 + node_base_size)
         else:
             node_size = node_base_size
             
         # Make focused community nodes larger
         if focus_community is not None and partition and partition[node] == focus_community:
-            node_size *= 1.2  # Reduced from 1.3
+            node_size *= 1.3
         
         # Create detailed tooltip
         title = f"<b>{node}</b>"
@@ -428,41 +448,6 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         )
 
     return G, net, partition
-
-# Streamlit App
-st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
-st.title("🧬 Advanced Knowledge Graph Analytics Platform")
-
-st.markdown("""
-**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
-""")
-
-# Sidebar for file upload and main options
-with st.sidebar:
-    st.header("📁 Data Upload")
-    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
-    
-    if uploaded_file:
-        st.header("🎨 Visualization Options")
-        color_by_community = st.checkbox("Color by Communities", value=True)
-        size_by_centrality = st.selectbox(
-            "Size nodes by:",
-            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
-            index=3
-        )
-        
-        # Graph size selector
-        graph_size = st.selectbox(
-            "Visualization size:",
-            ["medium", "large", "extra_large"],
-            index=1
-        )
-        
-        st.header("🔍 Analysis Focus")
-        analysis_mode = st.selectbox(
-            "Choose analysis type:",
-            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
-        )
 
 # Main application logic
 if uploaded_file is not None:
@@ -590,13 +575,16 @@ if uploaded_file is not None:
             with col2:
                 # Simple pie chart with matplotlib
                 top_relations = relation_df.head(8)
-                if len(top_relations) > 0:
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
-                    ax.set_title('Top Relationship Types')
-                    st.pyplot(fig)
-                else:
-                    st.info("No relationship data to display")
+                fig, ax = plt.subplots(figsize=(8, 6))
+                ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
+                ax.set_title('Top Relationship Types')
+                st.pyplot(fig), col2 = st.columns(2)
+            with col1:
+                st.dataframe(relation_df, use_container_width=True)
+            with col2:
+                fig = px.pie(relation_df.head(10), values='Frequency', names='Relation',
+                            title="Top Relationship Types")
+                st.plotly_chart(fig, use_container_width=True)
         
         elif analysis_mode == "Target Discovery":
             st.header("🎯 Target Discovery Engine")
@@ -667,36 +655,34 @@ if uploaded_file is not None:
                         target_df = pd.DataFrame(target_results)
                         st.dataframe(target_df, use_container_width=True)
                         
-                        # Visualize top targets with matplotlib
+                        # Visualize top targets
                         top_targets = targets[:10]
+                        fig = go.Figure()
                         
-                        fig, ax = plt.subplots(figsize=(10, 8))
+                        fig.add_trace(go.Scatter(
+                            x=[t[1]['pagerank'] for t in top_targets],
+                            y=[t[1]['degree'] for t in top_targets],
+                            mode='markers+text',
+                            text=[t[0][:20] + '...' if len(t[0]) > 20 else t[0] for t in top_targets],
+                            textposition="top center",
+                            marker=dict(
+                                size=[t[1]['betweenness'] * 1000 + 10 for t in top_targets],
+                                color=[t[1]['community'] for t in top_targets],
+                                colorscale='Viridis',
+                                showscale=True,
+                                colorbar=dict(title="Community")
+                            ),
+                            name="Potential Targets"
+                        ))
                         
-                        x_vals = [t[1]['pagerank'] for t in top_targets]
-                        y_vals = [t[1]['degree'] for t in top_targets]
-                        sizes = [t[1]['betweenness'] * 1000 + 50 for t in top_targets]
-                        colors = [t[1]['community'] for t in top_targets]
+                        fig.update_layout(
+                            title="Potential Targets: PageRank vs Degree (Size = Betweenness)",
+                            xaxis_title="PageRank Score",
+                            yaxis_title="Node Degree",
+                            hovermode='closest'
+                        )
                         
-                        scatter = ax.scatter(x_vals, y_vals, s=sizes, c=colors, 
-                                           cmap='viridis', alpha=0.7, edgecolors='black')
-                        
-                        # Add labels for top targets
-                        for i, (target, _) in enumerate(top_targets):
-                            label = target[:15] + '...' if len(target) > 15 else target
-                            ax.annotate(label, (x_vals[i], y_vals[i]), 
-                                      xytext=(5, 5), textcoords='offset points', 
-                                      fontsize=8, alpha=0.8)
-                        
-                        ax.set_xlabel('PageRank Score')
-                        ax.set_ylabel('Node Degree')
-                        ax.set_title('Potential Targets: PageRank vs Degree (Size = Betweenness)')
-                        
-                        # Add colorbar
-                        cbar = plt.colorbar(scatter)
-                        cbar.set_label('Community')
-                        
-                        plt.tight_layout()
-                        st.pyplot(fig)
+                        st.plotly_chart(fig, use_container_width=True)
                     else:
                         st.info("No potential targets found with the specified criteria.")
         
@@ -726,36 +712,22 @@ if uploaded_file is not None:
                     st.dataframe(comm_df, use_container_width=True)
                 
                 with col2:
-                    # Simple scatter plot with matplotlib
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    scatter = ax.scatter(comm_df['Size'], comm_df['Modularity'], 
-                                       c=range(len(comm_df)), cmap='viridis', alpha=0.7)
-                    ax.set_xlabel('Community Size')
-                    ax.set_ylabel('Modularity')
-                    ax.set_title('Community Size vs Modularity')
-                    
-                    # Add community labels
-                    for i, row in comm_df.iterrows():
-                        ax.annotate(f"C{row['Community']}", 
-                                  (row['Size'], row['Modularity']),
-                                  xytext=(5, 5), textcoords='offset points', fontsize=8)
-                    
-                    st.pyplot(fig)
+                    fig = px.scatter(comm_df, x='Size', y='Modularity', 
+                                   hover_data=['Community', 'Avg PageRank'],
+                                   title="Community Size vs Modularity")
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 # Quick community focus buttons
                 st.subheader("🎯 Quick Community Focus")
-                if len(community_stats) > 0:
-                    cols = st.columns(min(5, len(community_stats)))
-                    top_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:5]
-                    
-                    for i, (comm_id, stats) in enumerate(top_communities):
-                        with cols[i]:
-                            if st.button(f"Focus on Community {comm_id}\n({stats['size']} nodes)", key=f"focus_{comm_id}"):
-                                # Store focus community in session state and rerun
-                                st.session_state.focus_community = comm_id
-                                st.experimental_rerun()
-                else:
-                    st.info("No communities to display")
+                cols = st.columns(min(5, len(community_stats)))
+                top_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:5]
+                
+                for i, (comm_id, stats) in enumerate(top_communities):
+                    with cols[i]:
+                        if st.button(f"Focus on Community {comm_id}\n({stats['size']} nodes)", key=f"focus_{comm_id}"):
+                            # Store focus community in session state and rerun
+                            st.session_state.focus_community = comm_id
+                            st.experimental_rerun()
                 
                 # Detailed community analysis
                 selected_community = st.selectbox(
@@ -796,12 +768,8 @@ if uploaded_file is not None:
                     relations_list = [(rel, count) for rel, count in stats['key_relations'].most_common(10)]
                     if relations_list:
                         rel_df = pd.DataFrame(relations_list, columns=['Relationship', 'Count'])
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.barh(rel_df['Relationship'], rel_df['Count'])
-                        ax.set_xlabel('Count')
-                        ax.set_title('Key Relationships in Community')
-                        plt.tight_layout()
-                        st.pyplot(fig)
+                        fig = px.bar(rel_df, x='Count', y='Relationship', orientation='h')
+                        st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Community analysis requires community detection to be enabled.")
         
