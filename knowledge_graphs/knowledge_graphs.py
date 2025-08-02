@@ -238,41 +238,6 @@ class KnowledgeGraphAnalytics:
         
         return dict(community_stats)
 
-# Streamlit App
-st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
-st.title("🧬 Advanced Knowledge Graph Analytics Platform")
-
-st.markdown("""
-**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
-""")
-
-# Sidebar for file upload and main options
-with st.sidebar:
-    st.header("📁 Data Upload")
-    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
-    
-    if uploaded_file:
-        st.header("🎨 Visualization Options")
-        color_by_community = st.checkbox("Color by Communities", value=True)
-        size_by_centrality = st.selectbox(
-            "Size nodes by:",
-            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
-            index=3
-        )
-        
-        # Graph size selector
-        graph_size = st.selectbox(
-            "Visualization size:",
-            ["medium", "large", "extra_large"],
-            index=1
-        )
-        
-        st.header("🔍 Analysis Focus")
-        analysis_mode = st.selectbox(
-            "Choose analysis type:",
-            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
-        )
-
 # Function to generate the graph (enhanced with community filtering)
 def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, graph_size="large"):
     G = nx.Graph()
@@ -464,6 +429,41 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
 
     return G, net, partition
 
+# Streamlit App
+st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
+st.title("🧬 Advanced Knowledge Graph Analytics Platform")
+
+st.markdown("""
+**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
+""")
+
+# Sidebar for file upload and main options
+with st.sidebar:
+    st.header("📁 Data Upload")
+    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
+    
+    if uploaded_file:
+        st.header("🎨 Visualization Options")
+        color_by_community = st.checkbox("Color by Communities", value=True)
+        size_by_centrality = st.selectbox(
+            "Size nodes by:",
+            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
+            index=3
+        )
+        
+        # Graph size selector
+        graph_size = st.selectbox(
+            "Visualization size:",
+            ["medium", "large", "extra_large"],
+            index=1
+        )
+        
+        st.header("🔍 Analysis Focus")
+        analysis_mode = st.selectbox(
+            "Choose analysis type:",
+            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
+        )
+
 # Main application logic
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
@@ -597,12 +597,6 @@ if uploaded_file is not None:
                     st.pyplot(fig)
                 else:
                     st.info("No relationship data to display")
-            with col1:
-                st.dataframe(relation_df, use_container_width=True)
-            with col2:
-                fig = px.pie(relation_df.head(10), values='Frequency', names='Relation',
-                            title="Top Relationship Types")
-                st.plotly_chart(fig, use_container_width=True)
         
         elif analysis_mode == "Target Discovery":
             st.header("🎯 Target Discovery Engine")
@@ -750,15 +744,18 @@ if uploaded_file is not None:
                 
                 # Quick community focus buttons
                 st.subheader("🎯 Quick Community Focus")
-                cols = st.columns(min(5, len(community_stats)))
-                top_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:5]
-                
-                for i, (comm_id, stats) in enumerate(top_communities):
-                    with cols[i]:
-                        if st.button(f"Focus on Community {comm_id}\n({stats['size']} nodes)", key=f"focus_{comm_id}"):
-                            # Store focus community in session state and rerun
-                            st.session_state.focus_community = comm_id
-                            st.experimental_rerun()
+                if len(community_stats) > 0:
+                    cols = st.columns(min(5, len(community_stats)))
+                    top_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:5]
+                    
+                    for i, (comm_id, stats) in enumerate(top_communities):
+                        with cols[i]:
+                            if st.button(f"Focus on Community {comm_id}\n({stats['size']} nodes)", key=f"focus_{comm_id}"):
+                                # Store focus community in session state and rerun
+                                st.session_state.focus_community = comm_id
+                                st.experimental_rerun()
+                else:
+                    st.info("No communities to display")
                 
                 # Detailed community analysis
                 selected_community = st.selectbox(
