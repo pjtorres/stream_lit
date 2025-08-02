@@ -238,13 +238,14 @@ class KnowledgeGraphAnalytics:
         
         return dict(community_stats)
 
-# Function to generate the graph (enhanced with community filtering)
+# Function to generate the graph (FIXED community filtering)
 def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, graph_size="large"):
+    # Build the full graph first
     G = nx.Graph()
     for _, row in data.iterrows():
         G.add_edge(row['head'], row['tail'], label=row['relation'])
 
-    # Apply Louvain Community Coloring FIRST
+    # Apply community detection on FULL graph
     partition = None
     community_colors = None
     
@@ -254,71 +255,39 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
         community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
 
-    # Filter graph for specific community if requested - ENHANCED LOGIC
+    # NOW apply community filtering if requested
     if focus_community is not None and partition:
-        st.write(f"🔍 STARTING FILTER for community {focus_community}")
-        
-        # Get ALL nodes and their communities for debugging
-        all_communities = set(partition.values())
-        st.write(f"📋 Available communities: {sorted(all_communities)}")
+        # Debug info
+        st.write(f"🔍 Filtering for community {focus_community}")
         
         # Get nodes in the focused community
         focus_nodes = [node for node, comm in partition.items() if comm == focus_community]
-        st.write(f"📍 Community {focus_community} has {len(focus_nodes)} nodes")
+        st.write(f"📍 Found {len(focus_nodes)} nodes in community {focus_community}")
         
         if len(focus_nodes) > 0:
-            st.write(f"🎯 Sample nodes: {focus_nodes[:3]}...")
-            
-            # Include 1-hop neighbors from other communities
+            # Include direct neighbors from other communities
             extended_nodes = set(focus_nodes)
-            neighbor_count = 0
             
             for node in focus_nodes:
                 neighbors = list(G.neighbors(node))
                 for neighbor in neighbors:
-                    if neighbor not in extended_nodes:
-                        extended_nodes.add(neighbor)
-                        neighbor_count += 1
+                    extended_nodes.add(neighbor)
             
-            st.write(f"🔗 Added {neighbor_count} neighboring nodes")
-            st.write(f"📊 Total nodes to include: {len(extended_nodes)}")
-            
-            # FORCE the subgraph creation
-            original_node_count = len(G.nodes())
-            original_edge_count = len(G.edges())
+            st.write(f"🔗 Including neighbors, total nodes: {len(extended_nodes)}")
             
             # Create the filtered subgraph
+            original_size = len(G.nodes())
             G = G.subgraph(extended_nodes).copy()
+            new_size = len(G.nodes())
             
-            # Verify the filtering worked
-            new_node_count = len(G.nodes())
-            new_edge_count = len(G.edges())
+            st.write(f"✂️ Filtered graph: {original_size} → {new_size} nodes")
             
-            st.write(f"✂️ FILTERED: {original_node_count}→{new_node_count} nodes, {original_edge_count}→{new_edge_count} edges")
-            
-            if new_node_count == original_node_count:
-                st.error("❌ FILTERING FAILED - same number of nodes!")
-            else:
-                st.success(f"✅ FILTERING SUCCESS - reduced to {new_node_count} nodes")
-            
-            # Update partition for filtered graph
+            # Update partition for filtered graph only
             partition = {node: partition[node] for node in G.nodes() if node in partition}
-            
         else:
             st.error(f"❌ No nodes found in community {focus_community}")
-            st.write(f"Available communities with node counts:")
-            comm_counts = {}
-            for node, comm in partition.items():
-                comm_counts[comm] = comm_counts.get(comm, 0) + 1
-            for comm, count in sorted(comm_counts.items()):
-                st.write(f"  Community {comm}: {count} nodes")
-    else:
-        if focus_community is not None:
-            st.warning(f"⚠️ Cannot filter: focus_community={focus_community}, partition exists={partition is not None}")
-        else:
-            st.info("ℹ️ Showing full network (no community focus)")
 
-    # Set visualization size with better spacing
+    # Set visualization parameters
     if graph_size == "extra_large":
         height, width = "900px", "100%"
         physics_distance = 200
@@ -335,9 +304,10 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         node_base_size = 15
         spring_length = 200
 
+    # Create visualization
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
-    # Enhanced physics for better layout and more spread
+    # Enhanced physics
     net.set_options(f"""
     var options = {{
       "physics": {{
@@ -374,7 +344,7 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         "chosen": {{"edge": {{"color": "yellow", "width": 3}}}}
       }}
     }}
-    """);
+    """)
 
     # Calculate centrality
     centrality_map = {
@@ -388,7 +358,7 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     for node in G.nodes():
         if color_by_community and partition and node in partition:
             node_color = community_colors[partition[node]]
-            # Highlight focused community nodes with WHITE BORDER
+            # Highlight focused community nodes
             if focus_community is not None and partition[node] == focus_community:
                 border_color = "#ffffff"
                 border_width = 4
@@ -408,9 +378,9 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
             
         # Make focused community nodes larger
         if focus_community is not None and partition and node in partition and partition[node] == focus_community:
-            node_size *= 1.3  # Make them bigger to stand out
+            node_size *= 1.3
         
-        # Create detailed tooltip
+        # Create tooltip
         title = f"<b>{node}</b>"
         if color_by_community and partition and node in partition:
             title += f"<br>Community: {partition[node]}"
@@ -418,7 +388,6 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         if centrality:
             title += f"<br>{size_by_centrality}: {centrality[node]:.3f}"
             
-        # Add neighbors info
         neighbors = list(G.neighbors(node))
         if len(neighbors) > 0:
             title += f"<br>Neighbors ({len(neighbors)}): {', '.join(neighbors[:5])}"
@@ -436,25 +405,22 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
             chosen=True
         )
 
-    # Add edges with enhanced styling
+    # Add edges
     for edge in G.edges(data=True):
         label = edge[2].get('label', '')
         
-        # Style edges differently for focused community
+        # Style edges for focused community
         if focus_community is not None and partition:
             node1_comm = partition.get(edge[0])
             node2_comm = partition.get(edge[1])
             
             if node1_comm == focus_community and node2_comm == focus_community:
-                # Internal edges in focused community - BRIGHT WHITE
                 edge_color = "#ffffff"
                 edge_width = 4
             elif node1_comm == focus_community or node2_comm == focus_community:
-                # Edges connecting to focused community - ORANGE
                 edge_color = "#ff8800"
                 edge_width = 3
             else:
-                # External edges - GRAY
                 edge_color = "#666666"
                 edge_width = 1
         else:
@@ -481,6 +447,10 @@ st.markdown("""
 **Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
 """)
 
+# Initialize session state for focus community
+if 'focus_community' not in st.session_state:
+    st.session_state.focus_community = None
+
 # Sidebar for file upload and main options
 with st.sidebar:
     st.header("📁 Data Upload")
@@ -495,7 +465,6 @@ with st.sidebar:
             index=3
         )
         
-        # Graph size selector
         graph_size = st.selectbox(
             "Visualization size:",
             ["medium", "large", "extra_large"],
@@ -518,77 +487,75 @@ if uploaded_file is not None:
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        # Community selection for focused view - SIMPLIFIED AND FIXED
-        focus_community = st.session_state.get('focus_community', None)
-        
+        # FIXED Community selection logic
         if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus")
             community_stats = analytics.community_analysis()
             
-            # Create simple mapping of community representatives
-            community_names = {}
-            for comm_id, stats in community_stats.items():
-                if stats['nodes']:
-                    # Find most connected node in this community
-                    representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
-                    community_names[comm_id] = f"{representative} Community ({stats['size']} nodes)"
-                else:
-                    community_names[comm_id] = f"Community {comm_id} ({stats['size']} nodes)"
+            # Create community options with proper mapping
+            community_options = ["All Communities (Full Graph)"]
+            community_mapping = {}  # Maps display name to community ID
             
-            # Create options list
-            options = ["All Communities (Full Graph)"] + [community_names[cid] for cid in sorted(community_names.keys(), key=lambda x: community_stats[x]['size'], reverse=True)]
+            # Sort communities by size
+            sorted_communities = sorted(community_stats.items(), 
+                                      key=lambda x: x[1]['size'], 
+                                      reverse=True)
+            
+            for comm_id, stats in sorted_communities:
+                if stats['nodes']:
+                    # Find most connected node as representative
+                    representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
+                    display_name = f"{representative} ({stats['size']} nodes)"
+                    community_options.append(display_name)
+                    community_mapping[display_name] = comm_id
             
             # Find current selection index
             current_index = 0
-            if focus_community is not None and focus_community in community_names:
-                try:
-                    current_index = options.index(community_names[focus_community])
-                except ValueError:
-                    current_index = 0
+            if st.session_state.focus_community is not None:
+                for i, option in enumerate(community_options[1:], 1):
+                    if community_mapping[option] == st.session_state.focus_community:
+                        current_index = i
+                        break
             
-            # Selection widget
-            selected = st.sidebar.selectbox(
+            # Community selection
+            selected_option = st.sidebar.selectbox(
                 "Focus on specific community:",
-                options,
+                community_options,
                 index=current_index,
-                help="Select a community to zoom in and see detailed connections"
+                key="community_selector"
             )
             
-            # Handle selection change
-            if selected == "All Communities (Full Graph)":
-                if focus_community is not None:
-                    st.session_state.focus_community = None
-                    st.experimental_rerun()
-                focus_community = None
+            # Update focus community based on selection
+            if selected_option == "All Communities (Full Graph)":
+                new_focus = None
             else:
-                # Find which community was selected
-                selected_comm_id = None
-                for comm_id, name in community_names.items():
-                    if name == selected:
-                        selected_comm_id = comm_id
-                        break
-                
-                if selected_comm_id != focus_community:
-                    st.session_state.focus_community = selected_comm_id
-                    st.experimental_rerun()
-                focus_community = selected_comm_id
+                new_focus = community_mapping[selected_option]
+            
+            # Only update if changed to prevent unnecessary reruns
+            if new_focus != st.session_state.focus_community:
+                st.session_state.focus_community = new_focus
+                st.rerun()
             
             # Show current focus info
-            if focus_community is not None:
-                stats = community_stats[focus_community]
-                representative = max(stats['nodes'], key=lambda x: G_temp.degree(x)) if stats['nodes'] else f"Community {focus_community}"
-                st.sidebar.success(f"✅ Focusing on: {representative}")
-                st.sidebar.info(f"Nodes: {stats['size']} | Internal edges: {stats['internal_edges']}")
+            if st.session_state.focus_community is not None:
+                stats = community_stats[st.session_state.focus_community]
+                representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
+                st.sidebar.success(f"✅ Focused on: {representative}")
+                st.sidebar.info(f"Nodes: {stats['size']} | Edges: {stats['internal_edges']}")
         
-        # Generate final graph with focus - FORCE REGENERATION
-        st.write(f"🔧 Generating graph with focus_community: {focus_community}")  # Debug
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality, focus_community, graph_size)
-        st.write(f"📊 Generated graph has {len(G.nodes())} nodes and {len(G.edges())} edges")  # Debug
+        # Generate graph with current focus
+        G, net, partition = generate_graph(
+            data, 
+            color_by_community, 
+            size_by_centrality, 
+            st.session_state.focus_community, 
+            graph_size
+        )
         
-        # Update analytics with potentially filtered graph
+        # Update analytics with filtered graph
         analytics = KnowledgeGraphAnalytics(G, data, partition)
         
-        # Analysis modes
+        # Analysis modes (Overview Dashboard shown here as example)
         if analysis_mode == "Overview Dashboard":
             st.header("📊 Network Overview Dashboard")
             
@@ -603,7 +570,44 @@ if uploaded_file is not None:
             with col4:
                 st.metric("Average Degree", f"{np.mean([G.degree(n) for n in G.nodes()]):.1f}")
             
-            # Visualizations
+            # Show current view info
+            if st.session_state.focus_community is not None:
+                community_stats = analytics.community_analysis()
+                stats = community_stats[st.session_state.focus_community]
+                representative = max(stats['nodes'], key=lambda x: G.degree(x))
+                
+                st.subheader(f"🕸️ {representative} Community Focused View")
+                st.info(f"Showing {representative} community with direct connections. White borders indicate focused nodes.")
+                
+                # Reset button
+                if st.button("🔄 Return to Full Network", key="reset_focus"):
+                    st.session_state.focus_community = None
+                    st.rerun()
+            else:
+                st.subheader("🕸️ Complete Network Visualization")
+            
+            # Generate and display graph
+            import time
+            timestamp = int(time.time() * 1000)
+            graph_filename = f"kg_graph_{timestamp}.html"
+            
+            net.save_graph(graph_filename)
+            
+            try:
+                with open(graph_filename, 'r') as f:
+                    graph_html = f.read()
+                
+                # Make HTML unique to force refresh
+                unique_id = f"graph_{st.session_state.focus_community}_{timestamp}"
+                graph_html = graph_html.replace('<div id="mynetworkid"', f'<div id="{unique_id}"')
+                
+                height_map = {"medium": 650, "large": 800, "extra_large": 950}
+                components.html(graph_html, height=height_map.get(graph_size, 800))
+                
+            except FileNotFoundError:
+                st.error(f"Could not load graph file: {graph_filename}")
+            
+            # Hub analysis
             col1, col2 = st.columns(2)
             
             with col1:
@@ -611,14 +615,6 @@ if uploaded_file is not None:
                 hubs = analytics.identify_hub_nodes(10)
                 hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
-                
-                # Simple matplotlib chart
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.barh(hub_df['Node'], hub_df['Hub Score'])
-                ax.set_xlabel('Hub Score')
-                ax.set_title('Top Hub Nodes')
-                plt.tight_layout()
-                st.pyplot(fig)
             
             with col2:
                 st.subheader("🌉 Bridge Nodes")
@@ -631,387 +627,9 @@ if uploaded_file is not None:
                     } for b in bridges])
                     st.dataframe(bridge_df, use_container_width=True)
                 else:
-                    st.info("No bridge nodes found (requires community detection)")
-            
-            # Network visualization with focus indicator
-            if focus_community is not None:
-                # Get representative name for display
-                community_stats_display = analytics.community_analysis() if hasattr(analytics, 'community_analysis') else {}
-                if focus_community in community_stats_display:
-                    stats = community_stats_display[focus_community]
-                    representative = max(stats['nodes'], key=lambda x: G.degree(x)) if stats['nodes'] else f"Community {focus_community}"
-                    st.subheader(f"🕸️ {representative} Community Focused View")
-                    st.info(f"Showing {representative} Community with its direct connections. White borders indicate focused community nodes.")
-                    
-                    # Show current graph stats to verify filtering
-                    st.write(f"**Current view:** {len(G.nodes())} nodes, {len(G.edges())} edges (filtered from original graph)")
-                else:
-                    st.subheader(f"🕸️ Community {focus_community} Focused View")
-                    st.info(f"Showing Community {focus_community} with its direct connections. White borders indicate focused community nodes.")
-            else:
-                st.subheader("🕸️ Complete Network Visualization")
-                st.write(f"**Full network:** {len(G.nodes())} nodes, {len(G.edges())} edges")
-            
-            # Add reset button when focused
-            if focus_community is not None:
-                if st.button("🔄 Return to Full Network View", key="reset_view"):
-                    if 'focus_community' in st.session_state:
-                        del st.session_state.focus_community
-                    st.experimental_rerun()
-            
-            # Generate unique filename to force refresh
-            import time
-            timestamp = int(time.time() * 1000)
-            graph_filename = f"temp_graph_{timestamp}.html"
-            
-            # Save and display graph
-            net.save_graph(graph_filename)
-            
-            try:
-                with open(graph_filename, 'r') as f:
-                    graph_html = f.read()
-                
-                # Inject unique identifier into HTML to force browser refresh
-                unique_id = f"graph_{focus_community}_{timestamp}" if focus_community else f"graph_full_{timestamp}"
-                graph_html = graph_html.replace('<div id="mynetworkid"', f'<div id="{unique_id}"')
-                
-                # Adjust height based on graph size
-                height_map = {"medium": 650, "large": 800, "extra_large": 950}
-                
-                # Display with unique HTML content
-                components.html(graph_html, height=height_map.get(graph_size, 800))
-                
-            except FileNotFoundError:
-                st.error(f"Could not load graph file: {graph_filename}")
-            
-            # Clean up old files
-            import os
-            import glob
-            try:
-                old_files = glob.glob("temp_graph_*.html")
-                for old_file in old_files[:-3]:
-                    if os.path.exists(old_file):
-                        os.remove(old_file)
-            except:
-                pass
-            
-            # Relationship analysis
-            st.subheader("🔗 Relationship Type Analysis")
-            relation_stats = analytics.analyze_relationship_patterns()
-            relation_df = pd.DataFrame([
-                {
-                    'Relation': rel,
-                    'Frequency': stats['frequency'],
-                    'Unique Nodes': stats['unique_nodes'],
-                    'Density': f"{stats['density']:.3f}"
-                }
-                for rel, stats in relation_stats.items()
-            ]).sort_values('Frequency', ascending=False)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.dataframe(relation_df, use_container_width=True)
-            with col2:
-                # Simple pie chart with matplotlib
-                top_relations = relation_df.head(8)
-                if len(top_relations) > 0:
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
-                    ax.set_title('Top Relationship Types')
-                    st.pyplot(fig)
-                else:
-                    st.info("No relationship data to display")
+                    st.info("No bridge nodes found")
         
-        elif analysis_mode == "Target Discovery":
-            st.header("🎯 Target Discovery Engine")
-            
-            st.markdown("""
-            **Find potential therapeutic targets based on network proximity and centrality measures.**
-            Enter seed nodes (e.g., 'Bifidobacterium', 'B. infantis') to discover related targets.
-            """)
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                seed_input = st.text_input(
-                    "Enter seed nodes (comma-separated):",
-                    placeholder="Bifidobacterium, B. infantis, probiotic"
-                )
-                
-            with col2:
-                min_connections = st.slider("Minimum connections:", 1, 10, 2)
-            
-            # Relation type filter
-            all_relations = list(set(data['relation'].values))
-            selected_relations = st.multiselect(
-                "Filter by relationship types (optional):",
-                all_relations,
-                help="Leave empty to include all relationship types"
-            )
-            
-            if seed_input:
-                seed_nodes = [node.strip() for node in seed_input.split(',')]
-                
-                # Fuzzy match seed nodes to actual graph nodes
-                matched_seeds = []
-                for seed in seed_nodes:
-                    matches = process.extract(seed.lower(), 
-                                            [n.lower() for n in G.nodes()], 
-                                            limit=3)
-                    if matches and matches[0][1] > 60:  # 60% similarity threshold
-                        original_node = [n for n in G.nodes() if n.lower() == matches[0][0]][0]
-                        matched_seeds.append(original_node)
-                        st.success(f"Matched '{seed}' to '{original_node}'")
-                    else:
-                        st.warning(f"No close match found for '{seed}'")
-                
-                if matched_seeds:
-                    # Find potential targets
-                    targets = analytics.find_potential_targets(
-                        matched_seeds, 
-                        selected_relations if selected_relations else None,
-                        min_connections
-                    )
-                    
-                    if targets:
-                        st.subheader(f"🎯 Top Potential Targets (Found {len(targets)})")
-                        
-                        # Create detailed results
-                        target_results = []
-                        for target, scores in targets[:20]:  # Top 20
-                            target_results.append({
-                                'Target': target,
-                                'PageRank': f"{scores['pagerank']:.4f}",
-                                'Degree': scores['degree'],
-                                'Betweenness': f"{scores['betweenness']:.4f}",
-                                'Community': scores['community'],
-                                'Key Relations': ', '.join(scores['connecting_relations'][:3])
-                            })
-                        
-                        target_df = pd.DataFrame(target_results)
-                        st.dataframe(target_df, use_container_width=True)
-                        
-                        # Visualize top targets with matplotlib
-                        top_targets = targets[:10]
-                        
-                        fig, ax = plt.subplots(figsize=(10, 8))
-                        
-                        x_vals = [t[1]['pagerank'] for t in top_targets]
-                        y_vals = [t[1]['degree'] for t in top_targets]
-                        sizes = [t[1]['betweenness'] * 1000 + 50 for t in top_targets]
-                        colors = [t[1]['community'] for t in top_targets]
-                        
-                        scatter = ax.scatter(x_vals, y_vals, s=sizes, c=colors, 
-                                           cmap='viridis', alpha=0.7, edgecolors='black')
-                        
-                        # Add labels for top targets
-                        for i, (target, _) in enumerate(top_targets):
-                            label = target[:15] + '...' if len(target) > 15 else target
-                            ax.annotate(label, (x_vals[i], y_vals[i]), 
-                                      xytext=(5, 5), textcoords='offset points', 
-                                      fontsize=8, alpha=0.8)
-                        
-                        ax.set_xlabel('PageRank Score')
-                        ax.set_ylabel('Node Degree')
-                        ax.set_title('Potential Targets: PageRank vs Degree (Size = Betweenness)')
-                        
-                        # Add colorbar
-                        cbar = plt.colorbar(scatter)
-                        cbar.set_label('Community')
-                        
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                    else:
-                        st.info("No potential targets found with the specified criteria.")
-        
-        elif analysis_mode == "Community Analysis":
-            st.header("🏘️ Community Structure Analysis")
-            
-            if partition:
-                community_stats = analytics.community_analysis()
-                
-                # Community overview
-                st.subheader("Community Overview")
-                comm_overview = []
-                for comm_id, stats in community_stats.items():
-                    comm_overview.append({
-                        'Community': comm_id,
-                        'Size': stats['size'],
-                        'Internal Edges': stats['internal_edges'],
-                        'External Edges': stats['external_edges'],
-                        'Modularity': stats['internal_edges'] / (stats['internal_edges'] + stats['external_edges'] + 0.001),
-                        'Avg PageRank': f"{stats['avg_centrality']:.4f}"
-                    })
-                
-                comm_df = pd.DataFrame(comm_overview).sort_values('Size', ascending=False)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.dataframe(comm_df, use_container_width=True)
-                
-                with col2:
-                    # Simple scatter plot with matplotlib
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    scatter = ax.scatter(comm_df['Size'], comm_df['Modularity'], 
-                                       c=range(len(comm_df)), cmap='viridis', alpha=0.7)
-                    ax.set_xlabel('Community Size')
-                    ax.set_ylabel('Modularity')
-                    ax.set_title('Community Size vs Modularity')
-                    
-                    # Add community labels
-                    for i, row in comm_df.iterrows():
-                        ax.annotate(f"C{row['Community']}", 
-                                  (row['Size'], row['Modularity']),
-                                  xytext=(5, 5), textcoords='offset points', fontsize=8)
-                    
-                    st.pyplot(fig)
-                
-                # Quick community focus buttons
-                st.subheader("🎯 Quick Community Focus")
-                if len(community_stats) > 0:
-                    cols = st.columns(min(5, len(community_stats)))
-                    top_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:5]
-                    
-                    for i, (comm_id, stats) in enumerate(top_communities):
-                        with cols[i]:
-                            # Get representative node (most connected in community)
-                            if stats['nodes']:
-                                representative = max(stats['nodes'], key=lambda x: G_temp.degree(x))
-                            else:
-                                representative = f"Community {comm_id}"
-                            
-                            if st.button(f"Focus on {representative}\n({stats['size']} nodes)", key=f"focus_{comm_id}"):
-                                # Store focus community in session state and rerun
-                                st.session_state.focus_community = comm_id
-                                st.experimental_rerun()
-                else:
-                    st.info("No communities to display")
-                
-                # Detailed community analysis
-                selected_community = st.selectbox(
-                    "Select community for detailed analysis:",
-                    options=list(community_stats.keys()),
-                    format_func=lambda x: f"{max(community_stats[x]['nodes'], key=lambda n: G_temp.degree(n)) if community_stats[x]['nodes'] else f'Community {x}'} Community ({community_stats[x]['size']} nodes)"
-                )
-                
-                if selected_community is not None:
-                    stats = community_stats[selected_community]
-                    representative = max(stats['nodes'], key=lambda n: G_temp.degree(n)) if stats['nodes'] else f"Community {selected_community}"
-                    st.subheader(f"{representative} Community Details")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Nodes", stats['size'])
-                    with col2:
-                        st.metric("Internal Connections", stats['internal_edges'])
-                    with col3:
-                        st.metric("External Connections", stats['external_edges'])
-                    
-                    # Top nodes in community
-                    st.write("**Key nodes in this community:**")
-                    community_nodes = []
-                    for node in stats['nodes']:
-                        attrs = analytics.node_attributes[node]
-                        community_nodes.append({
-                            'Node': node,
-                            'Degree': attrs['degree'],
-                            'PageRank': f"{attrs['pagerank']:.4f}",
-                            'Betweenness': f"{attrs['betweenness_centrality']:.4f}"
-                        })
-                    
-                    community_node_df = pd.DataFrame(community_nodes).sort_values('PageRank', ascending=False)
-                    st.dataframe(community_node_df.head(10), use_container_width=True)
-                    
-                    # Key relationships
-                    st.write("**Key relationships within community:**")
-                    relations_list = [(rel, count) for rel, count in stats['key_relations'].most_common(10)]
-                    if relations_list:
-                        rel_df = pd.DataFrame(relations_list, columns=['Relationship', 'Count'])
-                        fig, ax = plt.subplots(figsize=(10, 6))
-                        ax.barh(rel_df['Relationship'], rel_df['Count'])
-                        ax.set_xlabel('Count')
-                        ax.set_title('Key Relationships in Community')
-                        plt.tight_layout()
-                        st.pyplot(fig)
-            else:
-                st.info("Community analysis requires community detection to be enabled.")
-        
-        elif analysis_mode == "Interactive Chat":
-            st.header("💬 Knowledge Graph Assistant")
-            
-            # Enhanced chatbot with more capabilities
-            user_question = st.text_input(
-                "Ask about your knowledge graph:",
-                placeholder="Try: 'Find targets similar to Bifidobacterium', 'What's in the largest community?', 'Show me bridge nodes'"
-            )
-            
-            if user_question:
-                question_lower = user_question.lower()
-                
-                # Enhanced query processing
-                if "targets similar to" in question_lower or "similar targets" in question_lower:
-                    # Extract entity
-                    words = preprocess_query(user_question).split()
-                    if "to" in words:
-                        entity_idx = words.index("to") + 1
-                        if entity_idx < len(words):
-                            entity = " ".join(words[entity_idx:])
-                            
-                            # Find similar targets
-                            matches = process.extract(entity, [n.lower() for n in G.nodes()], limit=1)
-                            if matches and matches[0][1] > 60:
-                                matched_node = [n for n in G.nodes() if n.lower() == matches[0][0]][0]
-                                targets = analytics.find_potential_targets([matched_node], min_connections=1)
-                                
-                                st.write(f"**Targets similar to '{matched_node}':**")
-                                for target, scores in targets[:10]:
-                                    st.write(f"- **{target}** (PageRank: {scores['pagerank']:.4f}, Degree: {scores['degree']})")
-                
-                elif "largest community" in question_lower or "biggest community" in question_lower:
-                    if partition:
-                        community_stats = analytics.community_analysis()
-                        largest_comm = max(community_stats.items(), key=lambda x: x[1]['size'])
-                        comm_id, stats = largest_comm
-                        
-                        st.write(f"**Largest Community (ID: {comm_id}): {stats['size']} nodes**")
-                        st.write("Top nodes:")
-                        for node in stats['nodes'][:10]:
-                            attrs = analytics.node_attributes[node]
-                            st.write(f"- {node} (PageRank: {attrs['pagerank']:.4f})")
-                
-                elif "bridge nodes" in question_lower:
-                    bridges = analytics.find_bridge_nodes()
-                    if bridges:
-                        st.write("**Top Bridge Nodes:**")
-                        for bridge in bridges[:10]:
-                            st.write(f"- **{bridge['node']}** connects {bridge['bridge_strength']} communities")
-                    else:
-                        st.write("No bridge nodes found.")
-                
-                elif "hub nodes" in question_lower or "most connected" in question_lower:
-                    hubs = analytics.identify_hub_nodes(10)
-                    st.write("**Top Hub Nodes:**")
-                    for node, score in hubs:
-                        st.write(f"- **{node}** (Hub Score: {score:.4f})")
-                
-                elif "statistics" in question_lower or "stats" in question_lower:
-                    st.write("**Network Statistics:**")
-                    st.write(f"- Nodes: {len(G.nodes())}")
-                    st.write(f"- Edges: {len(G.edges())}")
-                    st.write(f"- Average Degree: {np.mean([G.degree(n) for n in G.nodes()]):.2f}")
-                    st.write(f"- Density: {nx.density(G):.4f}")
-                    st.write(f"- Communities: {len(set(partition.values())) if partition else 'N/A'}")
-                    
-                    # Connectedness
-                    if nx.is_connected(G):
-                        st.write(f"- Average Path Length: {nx.average_shortest_path_length(G):.2f}")
-                    else:
-                        st.write("- Graph is not fully connected")
-                        st.write(f"- Connected Components: {nx.number_connected_components(G)}")
-                
-                else:
-                    # Fallback to original chatbot logic
-                    st.info("Try asking about: targets, communities, hubs, bridges, or statistics")
+        # Add other analysis modes here...
         
     else:
         st.error(f"Please ensure your file contains columns: {', '.join(required_columns)}")
