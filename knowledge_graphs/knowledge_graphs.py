@@ -659,13 +659,10 @@ if uploaded_file is not None:
                         del st.session_state.focus_community
                     st.experimental_rerun()
             
-            # Generate unique filename and key to prevent caching issues
+            # Generate unique filename to force refresh
             import time
-            timestamp = int(time.time() * 1000)  # milliseconds for uniqueness
+            timestamp = int(time.time() * 1000)
             graph_filename = f"temp_graph_{timestamp}.html"
-            
-            # Force component refresh with unique key
-            component_key = f"network_viz_{focus_community}_{timestamp}" if focus_community else f"network_viz_full_{timestamp}"
             
             # Save and display graph
             net.save_graph(graph_filename)
@@ -674,29 +671,29 @@ if uploaded_file is not None:
                 with open(graph_filename, 'r') as f:
                     graph_html = f.read()
                 
+                # Inject unique identifier into HTML to force browser refresh
+                unique_id = f"graph_{focus_community}_{timestamp}" if focus_community else f"graph_full_{timestamp}"
+                graph_html = graph_html.replace('<div id="mynetworkid"', f'<div id="{unique_id}"')
+                
                 # Adjust height based on graph size
                 height_map = {"medium": 650, "large": 800, "extra_large": 950}
                 
-                # Use unique key to force refresh
-                components.html(
-                    graph_html, 
-                    height=height_map.get(graph_size, 800),
-                    key=component_key  # This forces the component to refresh!
-                )
+                # Display with unique HTML content
+                components.html(graph_html, height=height_map.get(graph_size, 800))
                 
             except FileNotFoundError:
                 st.error(f"Could not load graph file: {graph_filename}")
             
-            # Clean up old files (optional)
+            # Clean up old files
             import os
             import glob
             try:
                 old_files = glob.glob("temp_graph_*.html")
-                for old_file in old_files[:-3]:  # Keep only last 3 files
+                for old_file in old_files[:-3]:
                     if os.path.exists(old_file):
                         os.remove(old_file)
             except:
-                pass  # Ignore cleanup errors
+                pass
             
             # Relationship analysis
             st.subheader("🔗 Relationship Type Analysis")
