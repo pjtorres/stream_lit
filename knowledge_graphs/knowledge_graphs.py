@@ -254,36 +254,69 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
         community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
 
-    # Filter graph for specific community if requested
+    # Filter graph for specific community if requested - ENHANCED LOGIC
     if focus_community is not None and partition:
-        st.write(f"🔍 Filtering for community {focus_community}")  # Debug message
+        st.write(f"🔍 STARTING FILTER for community {focus_community}")
+        
+        # Get ALL nodes and their communities for debugging
+        all_communities = set(partition.values())
+        st.write(f"📋 Available communities: {sorted(all_communities)}")
         
         # Get nodes in the focused community
         focus_nodes = [node for node, comm in partition.items() if comm == focus_community]
-        st.write(f"📍 Found {len(focus_nodes)} nodes in community {focus_community}: {focus_nodes[:5]}...")  # Debug
+        st.write(f"📍 Community {focus_community} has {len(focus_nodes)} nodes")
         
-        if focus_nodes:  # Only proceed if we found nodes
-            # Also include directly connected nodes from other communities (1-hop neighbors)
+        if len(focus_nodes) > 0:
+            st.write(f"🎯 Sample nodes: {focus_nodes[:3]}...")
+            
+            # Include 1-hop neighbors from other communities
             extended_nodes = set(focus_nodes)
+            neighbor_count = 0
+            
             for node in focus_nodes:
-                for neighbor in G.neighbors(node):
-                    extended_nodes.add(neighbor)
+                neighbors = list(G.neighbors(node))
+                for neighbor in neighbors:
+                    if neighbor not in extended_nodes:
+                        extended_nodes.add(neighbor)
+                        neighbor_count += 1
             
-            st.write(f"🔗 Including {len(extended_nodes)} total nodes with neighbors")  # Debug
+            st.write(f"🔗 Added {neighbor_count} neighboring nodes")
+            st.write(f"📊 Total nodes to include: {len(extended_nodes)}")
             
-            # Create subgraph - THIS IS THE KEY FIX
-            original_nodes = len(G.nodes())
+            # FORCE the subgraph creation
+            original_node_count = len(G.nodes())
+            original_edge_count = len(G.edges())
+            
+            # Create the filtered subgraph
             G = G.subgraph(extended_nodes).copy()
-            st.write(f"✂️ Filtered graph from {original_nodes} to {len(G.nodes())} nodes")  # Debug
+            
+            # Verify the filtering worked
+            new_node_count = len(G.nodes())
+            new_edge_count = len(G.edges())
+            
+            st.write(f"✂️ FILTERED: {original_node_count}→{new_node_count} nodes, {original_edge_count}→{new_edge_count} edges")
+            
+            if new_node_count == original_node_count:
+                st.error("❌ FILTERING FAILED - same number of nodes!")
+            else:
+                st.success(f"✅ FILTERING SUCCESS - reduced to {new_node_count} nodes")
             
             # Update partition for filtered graph
             partition = {node: partition[node] for node in G.nodes() if node in partition}
+            
         else:
-            st.error(f"❌ No nodes found for community {focus_community}")
-            # Don't filter if no nodes found
+            st.error(f"❌ No nodes found in community {focus_community}")
+            st.write(f"Available communities with node counts:")
+            comm_counts = {}
+            for node, comm in partition.items():
+                comm_counts[comm] = comm_counts.get(comm, 0) + 1
+            for comm, count in sorted(comm_counts.items()):
+                st.write(f"  Community {comm}: {count} nodes")
     else:
         if focus_community is not None:
-            st.write(f"⚠️ Cannot filter: partition is {partition}")  # Debug
+            st.warning(f"⚠️ Cannot filter: focus_community={focus_community}, partition exists={partition is not None}")
+        else:
+            st.info("ℹ️ Showing full network (no community focus)")
 
     # Set visualization size with better spacing
     if graph_size == "extra_large":
@@ -626,10 +659,13 @@ if uploaded_file is not None:
                         del st.session_state.focus_community
                     st.experimental_rerun()
             
-            # Generate unique filename to prevent caching issues
+            # Generate unique filename and key to prevent caching issues
             import time
             timestamp = int(time.time() * 1000)  # milliseconds for uniqueness
             graph_filename = f"temp_graph_{timestamp}.html"
+            
+            # Force component refresh with unique key
+            component_key = f"network_viz_{focus_community}_{timestamp}" if focus_community else f"network_viz_full_{timestamp}"
             
             # Save and display graph
             net.save_graph(graph_filename)
@@ -640,7 +676,13 @@ if uploaded_file is not None:
                 
                 # Adjust height based on graph size
                 height_map = {"medium": 650, "large": 800, "extra_large": 950}
-                components.html(graph_html, height=height_map.get(graph_size, 800))
+                
+                # Use unique key to force refresh
+                components.html(
+                    graph_html, 
+                    height=height_map.get(graph_size, 800),
+                    key=component_key  # This forces the component to refresh!
+                )
                 
             except FileNotFoundError:
                 st.error(f"Could not load graph file: {graph_filename}")
@@ -650,8 +692,9 @@ if uploaded_file is not None:
             import glob
             try:
                 old_files = glob.glob("temp_graph_*.html")
-                for old_file in old_files[:-5]:  # Keep only last 5 files
-                    os.remove(old_file)
+                for old_file in old_files[:-3]:  # Keep only last 3 files
+                    if os.path.exists(old_file):
+                        os.remove(old_file)
             except:
                 pass  # Ignore cleanup errors
             
