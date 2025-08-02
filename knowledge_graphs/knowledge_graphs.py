@@ -642,7 +642,7 @@ if uploaded_file is not None:
                     target_df = pd.DataFrame([
                         {
                             'Target': target,
-                            'PageRank': f"{data['pagerank']:.4f}",
+                            'PageRank': f"{target_data['pagerank']:.4f}",
                             'Degree': data['degree'],
                             'Community': data['community'],
                             'Key Relations': ', '.join(data['connecting_relations'][:3])
