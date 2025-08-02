@@ -280,30 +280,39 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     for _, row in data.iterrows():
         G.add_edge(row['head'], row['tail'], label=row['relation'])
 
-    # Set visualization size
+    # Set visualization size with better spacing
     if graph_size == "extra_large":
         height, width = "900px", "100%"
-        physics_distance = 150
-        node_base_size = 25  # Reduced from 35
+        physics_distance = 200  # Increased from 150
+        node_base_size = 25
+        spring_length = 300     # Increased
     elif graph_size == "large":
         height, width = "750px", "100%"
-        physics_distance = 120
-        node_base_size = 20  # Reduced from 30
+        physics_distance = 160  # Increased from 120
+        node_base_size = 20
+        spring_length = 250     # Increased
     else:  # medium
         height, width = "600px", "100%"
-        physics_distance = 100
-        node_base_size = 15  # Reduced from 25
+        physics_distance = 130  # Increased from 100
+        node_base_size = 15
+        spring_length = 200     # Increased
 
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
-    # Enhanced physics for better layout
+    # Enhanced physics for better layout and more spread
     net.set_options(f"""
     var options = {{
       "physics": {{
         "enabled": true,
-        "repulsion": {{"nodeDistance": {physics_distance}, "centralGravity": 0.3, "springLength": 200}},
+        "repulsion": {{
+          "nodeDistance": {physics_distance}, 
+          "centralGravity": 0.1,
+          "springLength": {spring_length},
+          "springConstant": 0.01,
+          "damping": 0.09
+        }},
         "solver": "repulsion",
-        "stabilization": {{"iterations": 150}}
+        "stabilization": {{"iterations": 200, "updateInterval": 25}}
       }},
       "interaction": {{
         "hover": true,
@@ -312,15 +321,22 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         "dragView": true
       }},
       "nodes": {{
-        "font": {{"size": 16, "color": "white"}},
-        "borderWidth": 2
+        "font": {{"size": 14, "color": "white"}},
+        "borderWidth": 2,
+        "chosen": {{
+          "node": {{
+            "label": {{"size": 18, "color": "yellow"}},
+            "color": {{"border": "yellow", "background": "rgba(255,255,0,0.3)"}}
+          }}
+        }}
       }},
       "edges": {{
-        "font": {{"size": 12, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
-        "smooth": {{"type": "continuous"}}
+        "font": {{"size": 10, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
+        "smooth": {{"type": "continuous", "roundness": 0.5}},
+        "chosen": {{"edge": {{"color": "yellow", "width": 3}}}}
       }}
     }}
-    """)
+    """);
 
     # Apply Louvain Community Coloring
     partition = None
@@ -655,34 +671,36 @@ if uploaded_file is not None:
                         target_df = pd.DataFrame(target_results)
                         st.dataframe(target_df, use_container_width=True)
                         
-                        # Visualize top targets
+                        # Visualize top targets with matplotlib
                         top_targets = targets[:10]
-                        fig = go.Figure()
                         
-                        fig.add_trace(go.Scatter(
-                            x=[t[1]['pagerank'] for t in top_targets],
-                            y=[t[1]['degree'] for t in top_targets],
-                            mode='markers+text',
-                            text=[t[0][:20] + '...' if len(t[0]) > 20 else t[0] for t in top_targets],
-                            textposition="top center",
-                            marker=dict(
-                                size=[t[1]['betweenness'] * 1000 + 10 for t in top_targets],
-                                color=[t[1]['community'] for t in top_targets],
-                                colorscale='Viridis',
-                                showscale=True,
-                                colorbar=dict(title="Community")
-                            ),
-                            name="Potential Targets"
-                        ))
+                        fig, ax = plt.subplots(figsize=(10, 8))
                         
-                        fig.update_layout(
-                            title="Potential Targets: PageRank vs Degree (Size = Betweenness)",
-                            xaxis_title="PageRank Score",
-                            yaxis_title="Node Degree",
-                            hovermode='closest'
-                        )
+                        x_vals = [t[1]['pagerank'] for t in top_targets]
+                        y_vals = [t[1]['degree'] for t in top_targets]
+                        sizes = [t[1]['betweenness'] * 1000 + 50 for t in top_targets]
+                        colors = [t[1]['community'] for t in top_targets]
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        scatter = ax.scatter(x_vals, y_vals, s=sizes, c=colors, 
+                                           cmap='viridis', alpha=0.7, edgecolors='black')
+                        
+                        # Add labels for top targets
+                        for i, (target, _) in enumerate(top_targets):
+                            label = target[:15] + '...' if len(target) > 15 else target
+                            ax.annotate(label, (x_vals[i], y_vals[i]), 
+                                      xytext=(5, 5), textcoords='offset points', 
+                                      fontsize=8, alpha=0.8)
+                        
+                        ax.set_xlabel('PageRank Score')
+                        ax.set_ylabel('Node Degree')
+                        ax.set_title('Potential Targets: PageRank vs Degree (Size = Betweenness)')
+                        
+                        # Add colorbar
+                        cbar = plt.colorbar(scatter)
+                        cbar.set_label('Community')
+                        
+                        plt.tight_layout()
+                        st.pyplot(fig)
                     else:
                         st.info("No potential targets found with the specified criteria.")
         
