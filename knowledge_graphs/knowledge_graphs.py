@@ -578,7 +578,7 @@ if uploaded_file is not None:
                 fig, ax = plt.subplots(figsize=(8, 6))
                 ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
                 ax.set_title('Top Relationship Types')
-                st.pyplot(fig), col2 = st.columns(2)
+                st.pyplot(fig)
             with col1:
                 st.dataframe(relation_df, use_container_width=True)
             with col2:
