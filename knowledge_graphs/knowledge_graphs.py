@@ -712,10 +712,21 @@ if uploaded_file is not None:
                     st.dataframe(comm_df, use_container_width=True)
                 
                 with col2:
-                    fig = px.scatter(comm_df, x='Size', y='Modularity', 
-                                   hover_data=['Community', 'Avg PageRank'],
-                                   title="Community Size vs Modularity")
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Simple scatter plot with matplotlib
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    scatter = ax.scatter(comm_df['Size'], comm_df['Modularity'], 
+                                       c=range(len(comm_df)), cmap='viridis', alpha=0.7)
+                    ax.set_xlabel('Community Size')
+                    ax.set_ylabel('Modularity')
+                    ax.set_title('Community Size vs Modularity')
+                    
+                    # Add community labels
+                    for i, row in comm_df.iterrows():
+                        ax.annotate(f"C{row['Community']}", 
+                                  (row['Size'], row['Modularity']),
+                                  xytext=(5, 5), textcoords='offset points', fontsize=8)
+                    
+                    st.pyplot(fig)
                 
                 # Quick community focus buttons
                 st.subheader("🎯 Quick Community Focus")
@@ -768,8 +779,12 @@ if uploaded_file is not None:
                     relations_list = [(rel, count) for rel, count in stats['key_relations'].most_common(10)]
                     if relations_list:
                         rel_df = pd.DataFrame(relations_list, columns=['Relationship', 'Count'])
-                        fig = px.bar(rel_df, x='Count', y='Relationship', orientation='h')
-                        st.plotly_chart(fig, use_container_width=True)
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        ax.barh(rel_df['Relationship'], rel_df['Count'])
+                        ax.set_xlabel('Count')
+                        ax.set_title('Key Relationships in Community')
+                        plt.tight_layout()
+                        st.pyplot(fig)
             else:
                 st.info("Community analysis requires community detection to be enabled.")
         
