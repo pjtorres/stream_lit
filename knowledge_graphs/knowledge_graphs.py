@@ -284,15 +284,15 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     if graph_size == "extra_large":
         height, width = "900px", "100%"
         physics_distance = 150
-        node_base_size = 35
+        node_base_size = 25  # Reduced from 35
     elif graph_size == "large":
         height, width = "750px", "100%"
         physics_distance = 120
-        node_base_size = 30
+        node_base_size = 20  # Reduced from 30
     else:  # medium
         height, width = "600px", "100%"
         physics_distance = 100
-        node_base_size = 25
+        node_base_size = 15  # Reduced from 25
 
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
