@@ -9,5 +9,9 @@ matplotlib>=3.8.0
 #numpy==1.26.4
 openpyxl>=3.0.0
 scipy>=1.10.0
-
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz
+
+# Additional packages for enhanced analytics
+seaborn>=0.11.0
+plotly>=5.0.0
+scikit-learn>=1.0.0
