@@ -618,15 +618,40 @@ if uploaded_file is not None:
             
             # Visualizations
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 st.subheader("🎯 Top Hub Nodes")
-                # Only include nodes from the selected community in the full partition
-                community_nodes = [n for n, c in partition_temp.items() if c == focus_community]
-                hubs_all = analytics_for_display.identify_hub_nodes(50)  # Get many
-                hubs = [(n, s) for n, s in hubs_all if n in community_nodes][:10]
+                hubs_all = analytics_for_display.identify_hub_nodes(50)
+            
+                if focus_community is not None:
+                    community_nodes = [n for n, c in partition_temp.items() if c == focus_community]
+                    hubs = [(n, s) for n, s in hubs_all if n in community_nodes][:10]
+                else:
+                    # All communities — show global top hubs
+                    hubs = hubs_all[:10]
+            
+                if hubs:
+                    hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
+                    st.dataframe(hub_df, use_container_width=True)
+            
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    ax.barh(hub_df['Node'], hub_df['Hub Score'])
+                    ax.set_xlabel('Hub Score')
+                    ax.set_title('Top Hub Nodes')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                else:
+                    st.info("No hub nodes found.")
 
-                hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
+            
+            # with col1:
+            #     st.subheader("🎯 Top Hub Nodes")
+            #     # Only include nodes from the selected community in the full partition
+            #     community_nodes = [n for n, c in partition_temp.items() if c == focus_community]
+            #     hubs_all = analytics_for_display.identify_hub_nodes(50)  # Get many
+            #     hubs = [(n, s) for n, s in hubs_all if n in community_nodes][:10]
+
+            #     hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
                 
                 # Simple matplotlib chart
