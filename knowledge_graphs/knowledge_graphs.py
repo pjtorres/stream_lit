@@ -734,22 +734,7 @@ if uploaded_file is not None:
                 # Rest of community analysis code...
             else:
                 st.warning("Community detection not available. Enable 'Color by Communities' in the sidebar.")
-                
-    else:
-        st.error(f"Please ensure your file contains columns: {', '.join(required_columns)}")
-else:
-    st.info("👆 Upload an Excel file to start analyzing your knowledge graph!")
-    
-    # Sample data format
-    st.subheader("📋 Expected Data Format")
-    sample_df = pd.DataFrame({
-        'head': ['Bifidobacterium', 'B. infantis', 'Probiotic'],
-        'tail': ['gut health', 'immune response', 'microbiome'],
-        'relation': ['affects', 'modulates', 'influences']
-    })
-    st.dataframe(sample_df, use_container_width=True)
-
-        # Add the remaining analysis modes
+        
         elif analysis_mode == "Target Discovery":
             st.header("🎯 Target Discovery Engine")
             
@@ -1032,3 +1017,17 @@ else:
                 if st.button("🗑️ Clear Chat History"):
                     st.session_state.chat_history = []
                     st.experimental_rerun()
+                    
+    else:
+        st.error(f"Please ensure your file contains columns: {', '.join(required_columns)}")
+else:
+    st.info("👆 Upload an Excel file to start analyzing your knowledge graph!")
+    
+    # Sample data format
+    st.subheader("📋 Expected Data Format")
+    sample_df = pd.DataFrame({
+        'head': ['Bifidobacterium', 'B. infantis', 'Probiotic'],
+        'tail': ['gut health', 'immune response', 'microbiome'],
+        'relation': ['affects', 'modulates', 'influences']
+    })
+    st.dataframe(sample_df, use_container_width=True)
