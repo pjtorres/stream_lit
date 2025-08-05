@@ -497,7 +497,8 @@ if uploaded_file is not None:
     
     if all(col in data.columns for col in required_columns):
         # Generate initial graph to get community info
-        G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
+        # Generate initial graph to get community info
+        G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality, None, 1, graph_size, False)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
         # FIXED Community selection with proper controls
@@ -576,12 +577,14 @@ if uploaded_file is not None:
                 st.metric("Average Degree", f"{np.mean([G.degree(n) for n in G.nodes()]):.1f}")
             
             # Show focus info
+            # Show focus info
             if focus_community is not None:
                 if expansion_degree == 0:
                     st.subheader(f"🎯 Community {focus_community} - Core Nodes Only")
-                    st.info(f"Showing only the {len([n for n in G.nodes() if partition[n] == focus_community])} core nodes in Community {focus_community}")
+                    core_nodes_count = len([n for n in G.nodes() if partition.get(n) == focus_community])
+                    st.info(f"Showing only the {core_nodes_count} core nodes in Community {focus_community}")
                 else:
-                    core_count = len([n for n in G.nodes() if partition[n] == focus_community])
+                    core_count = len([n for n in G.nodes() if partition.get(n) == focus_community])
                     total_count = len(G.nodes())
                     st.subheader(f"🎯 Community {focus_community} + {expansion_degree} Degree Expansion")
                     st.info(f"Showing {core_count} core nodes + {total_count - core_count} expanded nodes (total: {total_count})")
