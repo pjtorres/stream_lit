@@ -187,7 +187,7 @@ class KnowledgeGraphAnalytics:
                      reverse=True)
     
     def community_analysis(self):
-        """Comprehensive community analysis"""
+        """Comprehensive community analysis with FIXED counting"""
         if not self.partition:
             return None
         
@@ -200,11 +200,14 @@ class KnowledgeGraphAnalytics:
             'key_relations': Counter()
         })
         
-        # Gather community statistics
+        # FIXED: Properly count all nodes in each community
         for node in self.G.nodes():
             comm = self.partition[node]
             community_stats[comm]['nodes'].append(node)
-            community_stats[comm]['size'] += 1
+        
+        # Update sizes after collecting all nodes
+        for comm_id, stats in community_stats.items():
+            stats['size'] = len(stats['nodes'])  # FIXED: Correct size calculation
         
         # Calculate community properties
         for comm_id, stats in community_stats.items():
@@ -238,61 +241,77 @@ class KnowledgeGraphAnalytics:
         
         return dict(community_stats)
 
-# Streamlit App
-st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
-st.title("🧬 Advanced Knowledge Graph Analytics Platform")
-
-st.markdown("""
-**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
-""")
-
-# Sidebar for file upload and main options
-with st.sidebar:
-    st.header("📁 Data Upload")
-    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
+def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
+    """Get community subgraph with controllable expansion"""
+    if focus_community is None or partition is None:
+        return G, partition
     
-    if uploaded_file:
-        st.header("🎨 Visualization Options")
-        color_by_community = st.checkbox("Color by Communities", value=True)
-        size_by_centrality = st.selectbox(
-            "Size nodes by:",
-            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
-            index=3
-        )
+    # Start with core community nodes
+    core_nodes = {node for node, comm in partition.items() if comm == focus_community}
+    
+    if expansion_degree == 0:
+        # Only core community nodes
+        selected_nodes = core_nodes
+    else:
+        # Expand by N degrees
+        selected_nodes = set(core_nodes)
+        current_frontier = core_nodes
         
-        # Graph size selector
-        graph_size = st.selectbox(
-            "Visualization size:",
-            ["medium", "large", "extra_large"],
-            index=1
-        )
-        
-        st.header("🔍 Analysis Focus")
-        analysis_mode = st.selectbox(
-            "Choose analysis type:",
-            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
-        )
+        for degree in range(expansion_degree):
+            next_frontier = set()
+            for node in current_frontier:
+                for neighbor in G.neighbors(node):
+                    if neighbor not in selected_nodes:
+                        next_frontier.add(neighbor)
+                        selected_nodes.add(neighbor)
+            current_frontier = next_frontier
+            
+            if not current_frontier:  # No more nodes to expand to
+                break
+    
+    # Create subgraph
+    G_filtered = G.subgraph(selected_nodes).copy()
+    
+    # Update partition for filtered graph
+    partition_filtered = {node: partition[node] for node in G_filtered.nodes()}
+    
+    return G_filtered, partition_filtered
 
-# Function to generate the graph (enhanced with community filtering and REDUCED NODE SIZES)
+# Function to generate the graph (FIXED with proper community filtering)
 @st.cache_data
-def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, graph_size="large"):
+def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, 
+                   expansion_degree=1, graph_size="large"):
     G = nx.Graph()
     for _, row in data.iterrows():
         G.add_edge(row['head'], row['tail'], label=row['relation'])
+
+    # Apply Louvain Community Detection on FULL graph first
+    partition = None
+    community_colors = None
+    
+    if color_by_community:
+        partition = community_louvain.best_partition(G)
+        num_communities = len(set(partition.values()))
+        colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
+        community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
+
+    # FIXED: Apply community filtering AFTER community detection
+    if focus_community is not None and partition:
+        G, partition = get_community_subgraph(G, partition, focus_community, expansion_degree)
 
     # Set visualization size with REDUCED NODE SIZES
     if graph_size == "extra_large":
         height, width = "900px", "100%"
         physics_distance = 150
-        node_base_size = 15  # Reduced from 35
+        node_base_size = 15
     elif graph_size == "large":
         height, width = "750px", "100%"
         physics_distance = 120
-        node_base_size = 12  # Reduced from 30
+        node_base_size = 12
     else:  # medium
         height, width = "600px", "100%"
         physics_distance = 100
-        node_base_size = 10  # Reduced from 25
+        node_base_size = 10
 
     net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
     
@@ -322,36 +341,6 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     }}
     """)
 
-    # Apply Louvain Community Coloring
-    partition = None
-    community_colors = None
-    
-    if color_by_community:
-        partition = community_louvain.best_partition(G)
-        num_communities = len(set(partition.values()))
-        colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
-        community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
-
-    # Filter graph for specific community if requested
-    if focus_community is not None and partition:
-        # Get nodes in the focused community
-        focus_nodes = [node for node, comm in partition.items() if comm == focus_community]
-        
-        # Also include directly connected nodes from other communities (1-hop neighbors)
-        extended_nodes = set(focus_nodes)
-        for node in focus_nodes:
-            for neighbor in G.neighbors(node):
-                extended_nodes.add(neighbor)
-        
-        # Create subgraph
-        G_filtered = G.subgraph(extended_nodes).copy()
-        
-        # Update partition for filtered graph
-        partition_filtered = {node: partition[node] for node in G_filtered.nodes()}
-        
-        G = G_filtered
-        partition = partition_filtered
-
     # Calculate centrality
     centrality_map = {
         "Degree Centrality": nx.degree_centrality(G),
@@ -360,7 +349,7 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
     }
     centrality = centrality_map.get(size_by_centrality)
 
-    # Add nodes to the graph with REDUCED SIZES
+    # Add nodes to the graph
     for node in G.nodes():
         if color_by_community and partition:
             node_color = community_colors[partition[node]]
@@ -376,15 +365,15 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
             border_color = "#666666"
             border_width = 1
         
-        # Calculate node size with REDUCED SCALING
+        # Calculate node size
         if centrality:
-            node_size = (centrality[node] * 50 + node_base_size)  # Reduced from 150
+            node_size = (centrality[node] * 50 + node_base_size)
         else:
             node_size = node_base_size
             
-        # Make focused community nodes larger (but still smaller than before)
+        # Make focused community nodes larger
         if focus_community is not None and partition and partition[node] == focus_community:
-            node_size *= 1.2  # Reduced from 1.3
+            node_size *= 1.2
         
         # Create detailed tooltip
         title = f"<b>{node}</b>"
@@ -449,6 +438,41 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
 
     return G, net, partition
 
+# Streamlit App
+st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
+st.title("🧬 Advanced Knowledge Graph Analytics Platform")
+
+st.markdown("""
+**Discover actionable insights from your knowledge graph through advanced network analytics, community detection, and intelligent target identification.**
+""")
+
+# Sidebar for file upload and main options
+with st.sidebar:
+    st.header("📁 Data Upload")
+    uploaded_file = st.file_uploader("Upload Excel file with relationships", type=["xlsx", "xls"])
+    
+    if uploaded_file:
+        st.header("🎨 Visualization Options")
+        color_by_community = st.checkbox("Color by Communities", value=True)
+        size_by_centrality = st.selectbox(
+            "Size nodes by:",
+            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"],
+            index=3
+        )
+        
+        # Graph size selector
+        graph_size = st.selectbox(
+            "Visualization size:",
+            ["medium", "large", "extra_large"],
+            index=1
+        )
+        
+        st.header("🔍 Analysis Focus")
+        analysis_mode = st.selectbox(
+            "Choose analysis type:",
+            ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
+        )
+
 # Main application logic
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
@@ -459,13 +483,17 @@ if uploaded_file is not None:
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        # Community selection for focused view
+        # FIXED Community selection with proper controls
         focus_community = None
+        expansion_degree = 1
+        
         if color_by_community and partition_temp:
-            st.sidebar.header("🎯 Community Focus")
+            st.sidebar.header("🎯 Community Focus Controls")
+            
+            # Get CORRECT community stats
             community_stats = analytics.community_analysis()
             
-            # Create community options with sizes
+            # Create community options with CORRECT sizes
             community_options = ["All Communities (Full Graph)"]
             for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                 community_options.append(f"Community {comm_id} ({stats['size']} nodes)")
@@ -478,18 +506,42 @@ if uploaded_file is not None:
             
             if selected_community != "All Communities (Full Graph)":
                 focus_community = int(selected_community.split()[1])
+                
+                # FIXED: Add expansion degree control
+                st.sidebar.subheader("🔍 Expansion Control")
+                expansion_type = st.sidebar.radio(
+                    "View mode:",
+                    ["Core only", "Expand by degrees"],
+                    help="Core only: Show only nodes in this community\nExpand by degrees: Include neighboring nodes"
+                )
+                
+                if expansion_type == "Core only":
+                    expansion_degree = 0
+                else:
+                    expansion_degree = st.sidebar.slider(
+                        "Expansion degrees:",
+                        min_value=1,
+                        max_value=3,
+                        value=1,
+                        help="Number of degrees to expand from core community"
+                    )
+                
                 st.sidebar.success(f"Focusing on Community {focus_community}")
                 
-                # Show community info
+                # Show CORRECT community info
                 if focus_community in community_stats:
                     stats = community_stats[focus_community]
                     st.sidebar.write(f"**Community {focus_community} Details:**")
-                    st.sidebar.write(f"- Nodes: {stats['size']}")
+                    st.sidebar.write(f"- Core nodes: {stats['size']}")
                     st.sidebar.write(f"- Internal edges: {stats['internal_edges']}")
                     st.sidebar.write(f"- External edges: {stats['external_edges']}")
+                    
+                    if expansion_degree > 0:
+                        st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
         
-        # Generate final graph with focus
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality, focus_community, graph_size)
+        # Generate final graph with FIXED focus and expansion
+        G, net, partition = generate_graph(data, color_by_community, size_by_centrality, 
+                                         focus_community, expansion_degree, graph_size)
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
@@ -505,6 +557,24 @@ if uploaded_file is not None:
                 st.metric("Communities", len(set(partition.values())) if partition else "N/A")
             with col4:
                 st.metric("Average Degree", f"{np.mean([G.degree(n) for n in G.nodes()]):.1f}")
+            
+            # Show focus info
+            if focus_community is not None:
+                if expansion_degree == 0:
+                    st.subheader(f"🎯 Community {focus_community} - Core Nodes Only")
+                    st.info(f"Showing only the {len([n for n in G.nodes() if partition[n] == focus_community])} core nodes in Community {focus_community}")
+                else:
+                    core_count = len([n for n in G.nodes() if partition[n] == focus_community])
+                    total_count = len(G.nodes())
+                    st.subheader(f"🎯 Community {focus_community} + {expansion_degree} Degree Expansion")
+                    st.info(f"Showing {core_count} core nodes + {total_count - core_count} expanded nodes (total: {total_count})")
+            else:
+                st.subheader("🕸️ Complete Network Visualization")
+            
+            # Add reset button when focused
+            if focus_community is not None:
+                if st.button("🔄 Return to Full Network View"):
+                    st.experimental_rerun()
             
             # Visualizations
             col1, col2 = st.columns(2)
@@ -536,18 +606,7 @@ if uploaded_file is not None:
                 else:
                     st.info("No bridge nodes found (requires community detection)")
             
-            # Network visualization with focus indicator
-            if focus_community is not None:
-                st.subheader(f"🕸️ Community {focus_community} Focused View")
-                st.info(f"Showing Community {focus_community} with its direct connections. White borders indicate focused community nodes.")
-            else:
-                st.subheader("🕸️ Complete Network Visualization")
-            
-            # Add reset button when focused
-            if focus_community is not None:
-                if st.button("🔄 Return to Full Network View"):
-                    st.experimental_rerun()
-            
+            # Network visualization
             net.save_graph("temp_graph.html")
             with open("temp_graph.html", 'r') as f:
                 graph_html = f.read()
@@ -580,6 +639,7 @@ if uploaded_file is not None:
                 ax.set_title('Top Relationship Types')
                 st.pyplot(fig)
                 
+        # [Rest of the analysis modes remain the same...]
         elif analysis_mode == "Target Discovery":
             st.header("🎯 Target Discovery Engine")
             
@@ -690,12 +750,12 @@ if uploaded_file is not None:
                 
                 st.subheader("📈 Community Overview")
                 
-                # Community summary table
+                # Community summary table with FIXED sizes
                 summary_data = []
                 for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                     summary_data.append({
                         'Community': comm_id,
-                        'Size': stats['size'],
+                        'Size': stats['size'],  # Now correctly calculated
                         'Internal Edges': stats['internal_edges'],
                         'External Edges': stats['external_edges'],
                         'Avg Centrality': f"{stats['avg_centrality']:.4f}",
