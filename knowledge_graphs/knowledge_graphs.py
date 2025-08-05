@@ -555,7 +555,7 @@ if uploaded_file is not None:
                             help="Number of degrees to expand from core community"
                         )
                     
-                     st.sidebar.success(f"Focusing on Community {focus_community}")
+                    st.sidebar.success(f"Focusing on Community {focus_community}")
         if focus_community is not None and partition:
             with st.sidebar:
                 # Create analytics for the CURRENT filtered graph
