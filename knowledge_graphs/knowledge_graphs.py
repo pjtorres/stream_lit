@@ -573,7 +573,7 @@ if uploaded_file is not None:
                     
                     if expansion_degree > 0:
                         # Show expansion info
-                        core_nodes_in_view = [n for n in G.nodes()
+                        core_nodes_in_view = [n for n in G.nodes()]
                     
         
         # Generate final graph with FIXED focus and expansion
