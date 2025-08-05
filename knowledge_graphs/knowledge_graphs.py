@@ -270,10 +270,12 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
                 break
     
     # Create subgraph
-    G_filtered = G.subgraph(selected_nodes).copy()
+    # Create subgraph - FIXED to ensure all selected nodes exist
+    valid_nodes = {node for node in selected_nodes if node in G.nodes()}
+    G_filtered = G.subgraph(valid_nodes).copy()
     
     # Update partition for filtered graph
-    partition_filtered = {node: partition[node] for node in G_filtered.nodes()}
+    partition_filtered = {node: partition[node] for node in G_filtered.nodes() if node in partition}
     
     return G_filtered, partition_filtered
 
