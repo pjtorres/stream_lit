@@ -314,9 +314,8 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         # Validate that the focus_community exists
         available_communities = set(partition.values())
         if focus_community not in available_communities:
-            # Do not validate here! Assume it's already validated outside.
-            pass
-
+            st.error(f"Community {focus_community} not found. Available communities: {sorted(available_communities)}")
+            focus_community = None
         else:
             G, partition = get_community_subgraph(G, partition, focus_community, expansion_degree)
 
@@ -460,8 +459,6 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         )
 
     # Return original partition for analytics, but filtered graph for visualization
-    print(f"Visualizing {len(G.nodes())} nodes. Should match community size.")
-
     return G, net, original_partition
 
 # Streamlit App
@@ -507,20 +504,17 @@ if uploaded_file is not None:
     if all(col in data.columns for col in required_columns):
         # Generate initial graph to get community info - FIXED to use original partition
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
-        full_partition = partition_temp
-        analytics = KnowledgeGraphAnalytics(G_temp, data, full_partition)
-        community_stats = analytics.community_analysis()
-
+        analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
         # FIXED Community selection with proper controls
         focus_community = None
         expansion_degree = 1
         
-        if color_by_community and full_partition:
+        if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus Controls")
             
             # Get CORRECT community stats
-            # community_stats = analytics.community_analysis()
+            community_stats = analytics.community_analysis()
             
             # Create community options with CORRECT sizes
             community_options = ["All Communities (Full Graph)"]
@@ -535,13 +529,11 @@ if uploaded_file is not None:
             
             if selected_community != "All Communities (Full Graph)":
                 focus_community = int(selected_community.split()[1])
-            
-                if focus_community not in set(partition_temp.values()):
-                    st.sidebar.error(f"Community {focus_community} not found! Available: {sorted(set(partition_temp.values()))}")
+                
+                # Validate the community exists
+                if focus_community not in community_stats:
+                    st.sidebar.error(f"Community {focus_community} not found!")
                     focus_community = None
-                # if focus_community not in community_stats:
-                #     st.sidebar.error(f"Community {focus_community} not found!")
-                #     focus_community = None
                 else:
                     # FIXED: Add expansion degree control
                     st.sidebar.subheader("🔍 Expansion Control")
@@ -621,11 +613,7 @@ if uploaded_file is not None:
             
             with col1:
                 st.subheader("🎯 Top Hub Nodes")
-                # Only include nodes from the selected community in the full partition
-                community_nodes = [n for n, c in partition_temp.items() if c == focus_community]
-                hubs_all = analytics_for_display.identify_hub_nodes(50)  # Get many
-                hubs = [(n, s) for n, s in hubs_all if n in community_nodes][:10]
-
+                hubs = analytics_for_display.identify_hub_nodes(10)
                 hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
                 
