@@ -536,9 +536,12 @@ if uploaded_file is not None:
                 focus_community = int(selected_community.split()[1])
                 
                 # Validate the community exists
-                if focus_community not in community_stats:
-                    st.sidebar.error(f"Community {focus_community} not found!")
+                if focus_community not in set(partition_temp.values()):
+                    st.sidebar.error(f"Community {focus_community} not found! Available: {sorted(set(partition_temp.values()))}")
                     focus_community = None
+                # if focus_community not in community_stats:
+                #     st.sidebar.error(f"Community {focus_community} not found!")
+                #     focus_community = None
                 else:
                     # FIXED: Add expansion degree control
                     st.sidebar.subheader("🔍 Expansion Control")
