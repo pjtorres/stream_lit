@@ -513,12 +513,13 @@ if uploaded_file is not None:
         if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus Controls")
             
-            # Get CORRECT community stats
-            community_stats = analytics.community_analysis()
+            # Get ORIGINAL community stats for selection menu only
+            original_analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
+            original_community_stats = original_analytics.community_analysis()
             
-            # Create community options with CORRECT sizes
+            # Create community options with ORIGINAL sizes for selection
             community_options = ["All Communities (Full Graph)"]
-            for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
+            for comm_id, stats in sorted(original_community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                 community_options.append(f"Community {comm_id} ({stats['size']} nodes)")
             
             selected_community = st.sidebar.selectbox(
@@ -531,11 +532,11 @@ if uploaded_file is not None:
                 focus_community = int(selected_community.split()[1])
                 
                 # Validate the community exists
-                if focus_community not in community_stats:
+                if focus_community not in original_community_stats:
                     st.sidebar.error(f"Community {focus_community} not found!")
                     focus_community = None
                 else:
-                    # FIXED: Add expansion degree control
+                    # Expansion degree control
                     st.sidebar.subheader("🔍 Expansion Control")
                     expansion_type = st.sidebar.radio(
                         "View mode:",
@@ -554,21 +555,30 @@ if uploaded_file is not None:
                             help="Number of degrees to expand from core community"
                         )
                     
-                    st.sidebar.success(f"Focusing on Community {focus_community}")
+                     st.sidebar.success(f"Focusing on Community {focus_community}")
+        if focus_community is not None and partition:
+            with st.sidebar:
+                # Create analytics for the CURRENT filtered graph
+                current_analytics = KnowledgeGraphAnalytics(G, data, partition)
+                current_community_stats = current_analytics.community_analysis()
+                
+                # Get stats for the focused community in the CURRENT view
+                if focus_community in current_community_stats:
+                    current_stats = current_community_stats[focus_community]
                     
-                    # Show CORRECT community info
-                    stats = community_stats[focus_community]
-                    st.sidebar.write(f"**Community {focus_community} Details:**")
-                    st.sidebar.write(f"- Core nodes: {stats['size']}")
-                    st.sidebar.write(f"- Internal edges: {stats['internal_edges']}")
-                    st.sidebar.write(f"- External edges: {stats['external_edges']}")
+                    st.write(f"**Community {focus_community} Details (Current View):**")
+                    st.write(f"- Nodes in view: {current_stats['size']}")
+                    st.write(f"- Internal edges: {current_stats['internal_edges']}")
+                    st.write(f"- External edges: {current_stats['external_edges']}")
                     
                     if expansion_degree > 0:
-                        st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
+                        # Show expansion info
+                        core_nodes_in_view = [n for n in G.nodes()
+                    
         
         # Generate final graph with FIXED focus and expansion
         G, net, partition = generate_graph(data, color_by_community, size_by_centrality, 
-                                         focus_community, expansion_degree, graph_size)
+                                 focus_community, expansion_degree, graph_size)
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
