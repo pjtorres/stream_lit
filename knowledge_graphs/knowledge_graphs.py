@@ -459,6 +459,8 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         )
 
     # Return original partition for analytics, but filtered graph for visualization
+    print(f"Visualizing {len(G.nodes())} nodes. Should match community size.")
+
     return G, net, original_partition
 
 # Streamlit App
@@ -616,7 +618,11 @@ if uploaded_file is not None:
             
             with col1:
                 st.subheader("🎯 Top Hub Nodes")
-                hubs = analytics_for_display.identify_hub_nodes(10)
+                # Only include nodes from the selected community in the full partition
+                community_nodes = [n for n, c in partition_temp.items() if c == focus_community]
+                hubs_all = analytics_for_display.identify_hub_nodes(50)  # Get many
+                hubs = [(n, s) for n, s in hubs_all if n in community_nodes][:10]
+
                 hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
                 
