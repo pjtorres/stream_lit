@@ -314,8 +314,9 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         # Validate that the focus_community exists
         available_communities = set(partition.values())
         if focus_community not in available_communities:
-            st.error(f"Community {focus_community} not found. Available communities: {sorted(available_communities)}")
-            focus_community = None
+            # Do not validate here! Assume it's already validated outside.
+            pass
+
         else:
             G, partition = get_community_subgraph(G, partition, focus_community, expansion_degree)
 
@@ -534,8 +535,7 @@ if uploaded_file is not None:
             
             if selected_community != "All Communities (Full Graph)":
                 focus_community = int(selected_community.split()[1])
-                
-                # Validate the community exists
+            
                 if focus_community not in set(partition_temp.values()):
                     st.sidebar.error(f"Community {focus_community} not found! Available: {sorted(set(partition_temp.values()))}")
                     focus_community = None
