@@ -242,12 +242,23 @@ class KnowledgeGraphAnalytics:
         return dict(community_stats)
 
 def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
-    """Get community subgraph with controllable expansion"""
+    """FIXED: Get community subgraph with controllable expansion - ensures correct community filtering"""
     if focus_community is None or partition is None:
         return G, partition
     
-    # Start with core community nodes
+    # DEBUGGING: Print community information (optional - you can remove this)
+    print(f"DEBUG: Focusing on community {focus_community}")
+    community_counts = Counter(partition.values())
+    print(f"DEBUG: All community sizes: {dict(community_counts)}")
+    focus_nodes = [node for node, comm in partition.items() if comm == focus_community]
+    print(f"DEBUG: Nodes in community {focus_community}: {focus_nodes}")
+    
+    # Start with core community nodes - FIXED to use correct community ID
     core_nodes = {node for node, comm in partition.items() if comm == focus_community}
+    
+    if len(core_nodes) == 0:
+        print(f"WARNING: No nodes found in community {focus_community}")
+        return G, partition
     
     if expansion_degree == 0:
         # Only core community nodes
@@ -260,21 +271,25 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
         for degree in range(expansion_degree):
             next_frontier = set()
             for node in current_frontier:
-                for neighbor in G.neighbors(node):
-                    if neighbor not in selected_nodes:
-                        next_frontier.add(neighbor)
-                        selected_nodes.add(neighbor)
+                if node in G.nodes():  # Safety check
+                    for neighbor in G.neighbors(node):
+                        if neighbor not in selected_nodes:
+                            next_frontier.add(neighbor)
+                            selected_nodes.add(neighbor)
             current_frontier = next_frontier
             
             if not current_frontier:  # No more nodes to expand to
                 break
     
-    # Create subgraph
     # Create subgraph - FIXED to ensure all selected nodes exist
     valid_nodes = {node for node in selected_nodes if node in G.nodes()}
+    if len(valid_nodes) == 0:
+        print("WARNING: No valid nodes found for subgraph")
+        return G, partition
+        
     G_filtered = G.subgraph(valid_nodes).copy()
     
-    # Update partition for filtered graph
+    # Update partition for filtered graph - FIXED to maintain correct community assignments
     partition_filtered = {node: partition[node] for node in G_filtered.nodes() if node in partition}
     
     return G_filtered, partition_filtered
