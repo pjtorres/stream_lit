@@ -496,7 +496,156 @@ with st.sidebar:
             ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
         )
 
-# Main application logic
+
+
+###############
+# Helper functions to extract from the generate_graph function
+def create_network_visualization(G_display, partition_display, global_partition, community_colors, 
+                                size_by_centrality, focus_community, graph_size):
+    """Create the pyvis network visualization object"""
+    
+    # Set visualization size with REDUCED NODE SIZES
+    if graph_size == "extra_large":
+        height, width = "900px", "100%"
+        physics_distance = 150
+        node_base_size = 15
+    elif graph_size == "large":
+        height, width = "750px", "100%"
+        physics_distance = 120
+        node_base_size = 12
+    else:  # medium
+        height, width = "600px", "100%"
+        physics_distance = 100
+        node_base_size = 10
+
+    net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
+    
+    # Enhanced physics for better layout
+    net.set_options(f"""
+    var options = {{
+      "physics": {{
+        "enabled": true,
+        "repulsion": {{"nodeDistance": {physics_distance}, "centralGravity": 0.3, "springLength": 200}},
+        "solver": "repulsion",
+        "stabilization": {{"iterations": 150}}
+      }},
+      "interaction": {{
+        "hover": true,
+        "tooltipDelay": 200,
+        "zoomView": true,
+        "dragView": true
+      }},
+      "nodes": {{
+        "font": {{"size": 14, "color": "white"}},
+        "borderWidth": 2
+      }},
+      "edges": {{
+        "font": {{"size": 12, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
+        "smooth": {{"type": "continuous"}}
+      }}
+    }}
+    """)
+
+    # Calculate centrality on the CURRENT graph (filtered or full)
+    centrality_map = {
+        "Degree Centrality": nx.degree_centrality(G_display),
+        "Betweenness Centrality": nx.betweenness_centrality(G_display),
+        "PageRank": nx.pagerank(G_display)
+    }
+    centrality = centrality_map.get(size_by_centrality)
+
+    # Add nodes to the graph with FIXED community highlighting
+    for node in G_display.nodes():
+        if partition_display and node in partition_display:
+            node_community = partition_display[node]
+            node_color = community_colors.get(node_community, "#97c2fc") if community_colors else "#97c2fc"
+            
+            # FIXED: Highlight focused community nodes correctly using GLOBAL partition
+            if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
+                border_color = "#ffffff"
+                border_width = 4
+            else:
+                border_color = "#666666"
+                border_width = 1
+        else:
+            node_color = "#97c2fc"
+            border_color = "#666666"
+            border_width = 1
+        
+        # Calculate node size
+        if centrality and node in centrality:
+            node_size = (centrality[node] * 50 + node_base_size)
+        else:
+            node_size = node_base_size
+            
+        # Make focused community nodes larger
+        if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
+            node_size *= 1.3  # More visible increase
+        
+        # Create detailed tooltip
+        title = f"<b>{node}</b>"
+        if global_partition and node in global_partition:
+            title += f"<br>Community: {global_partition[node]}"
+        title += f"<br>Degree: {G_display.degree(node)}"
+        if centrality and node in centrality:
+            title += f"<br>{size_by_centrality}: {centrality[node]:.3f}"
+            
+        # Add neighbors info
+        neighbors = list(G_display.neighbors(node))
+        if len(neighbors) > 0:
+            title += f"<br>Neighbors ({len(neighbors)}): {', '.join(neighbors[:5])}"
+            if len(neighbors) > 5:
+                title += "..."
+        
+        net.add_node(
+            node, 
+            label=str(node), 
+            title=title, 
+            color=node_color,
+            size=node_size,
+            borderWidth=border_width,
+            borderWidthSelected=6,
+            chosen=True
+        )
+
+    # Add edges with enhanced styling
+    for edge in G_display.edges(data=True):
+        label = edge[2].get('label', '')
+        
+        # Style edges differently for focused community
+        if focus_community is not None and global_partition:
+            node1_comm = global_partition.get(edge[0], -1)
+            node2_comm = global_partition.get(edge[1], -1)
+            
+            if node1_comm == focus_community and node2_comm == focus_community:
+                # Internal edges in focused community
+                edge_color = "#ffffff"
+                edge_width = 3
+            elif node1_comm == focus_community or node2_comm == focus_community:
+                # Edges connecting to focused community
+                edge_color = "#ffaa00"
+                edge_width = 2
+            else:
+                # External edges
+                edge_color = "#666666"
+                edge_width = 1
+        else:
+            edge_color = "#848484"
+            edge_width = 1
+        
+        net.add_edge(
+            edge[0], 
+            edge[1], 
+            title=f"Relationship: {label}", 
+            label=label,
+            color=edge_color,
+            width=edge_width,
+            font={'size': 10, 'color': 'white'}
+        )
+
+    return net
+######################
+
 # Main application logic
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
@@ -1104,148 +1253,3 @@ else:
     st.dataframe(sample_df, use_container_width=True)
 
 
-# Helper functions to extract from the generate_graph function
-def create_network_visualization(G_display, partition_display, global_partition, community_colors, 
-                                size_by_centrality, focus_community, graph_size):
-    """Create the pyvis network visualization object"""
-    
-    # Set visualization size with REDUCED NODE SIZES
-    if graph_size == "extra_large":
-        height, width = "900px", "100%"
-        physics_distance = 150
-        node_base_size = 15
-    elif graph_size == "large":
-        height, width = "750px", "100%"
-        physics_distance = 120
-        node_base_size = 12
-    else:  # medium
-        height, width = "600px", "100%"
-        physics_distance = 100
-        node_base_size = 10
-
-    net = Network(height=height, width=width, bgcolor="#222222", font_color="white")
-    
-    # Enhanced physics for better layout
-    net.set_options(f"""
-    var options = {{
-      "physics": {{
-        "enabled": true,
-        "repulsion": {{"nodeDistance": {physics_distance}, "centralGravity": 0.3, "springLength": 200}},
-        "solver": "repulsion",
-        "stabilization": {{"iterations": 150}}
-      }},
-      "interaction": {{
-        "hover": true,
-        "tooltipDelay": 200,
-        "zoomView": true,
-        "dragView": true
-      }},
-      "nodes": {{
-        "font": {{"size": 14, "color": "white"}},
-        "borderWidth": 2
-      }},
-      "edges": {{
-        "font": {{"size": 12, "color": "white", "strokeWidth": 0, "strokeColor": "black"}},
-        "smooth": {{"type": "continuous"}}
-      }}
-    }}
-    """)
-
-    # Calculate centrality on the CURRENT graph (filtered or full)
-    centrality_map = {
-        "Degree Centrality": nx.degree_centrality(G_display),
-        "Betweenness Centrality": nx.betweenness_centrality(G_display),
-        "PageRank": nx.pagerank(G_display)
-    }
-    centrality = centrality_map.get(size_by_centrality)
-
-    # Add nodes to the graph with FIXED community highlighting
-    for node in G_display.nodes():
-        if partition_display and node in partition_display:
-            node_community = partition_display[node]
-            node_color = community_colors.get(node_community, "#97c2fc") if community_colors else "#97c2fc"
-            
-            # FIXED: Highlight focused community nodes correctly using GLOBAL partition
-            if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
-                border_color = "#ffffff"
-                border_width = 4
-            else:
-                border_color = "#666666"
-                border_width = 1
-        else:
-            node_color = "#97c2fc"
-            border_color = "#666666"
-            border_width = 1
-        
-        # Calculate node size
-        if centrality and node in centrality:
-            node_size = (centrality[node] * 50 + node_base_size)
-        else:
-            node_size = node_base_size
-            
-        # Make focused community nodes larger
-        if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
-            node_size *= 1.3  # More visible increase
-        
-        # Create detailed tooltip
-        title = f"<b>{node}</b>"
-        if global_partition and node in global_partition:
-            title += f"<br>Community: {global_partition[node]}"
-        title += f"<br>Degree: {G_display.degree(node)}"
-        if centrality and node in centrality:
-            title += f"<br>{size_by_centrality}: {centrality[node]:.3f}"
-            
-        # Add neighbors info
-        neighbors = list(G_display.neighbors(node))
-        if len(neighbors) > 0:
-            title += f"<br>Neighbors ({len(neighbors)}): {', '.join(neighbors[:5])}"
-            if len(neighbors) > 5:
-                title += "..."
-        
-        net.add_node(
-            node, 
-            label=str(node), 
-            title=title, 
-            color=node_color,
-            size=node_size,
-            borderWidth=border_width,
-            borderWidthSelected=6,
-            chosen=True
-        )
-
-    # Add edges with enhanced styling
-    for edge in G_display.edges(data=True):
-        label = edge[2].get('label', '')
-        
-        # Style edges differently for focused community
-        if focus_community is not None and global_partition:
-            node1_comm = global_partition.get(edge[0], -1)
-            node2_comm = global_partition.get(edge[1], -1)
-            
-            if node1_comm == focus_community and node2_comm == focus_community:
-                # Internal edges in focused community
-                edge_color = "#ffffff"
-                edge_width = 3
-            elif node1_comm == focus_community or node2_comm == focus_community:
-                # Edges connecting to focused community
-                edge_color = "#ffaa00"
-                edge_width = 2
-            else:
-                # External edges
-                edge_color = "#666666"
-                edge_width = 1
-        else:
-            edge_color = "#848484"
-            edge_width = 1
-        
-        net.add_edge(
-            edge[0], 
-            edge[1], 
-            title=f"Relationship: {label}", 
-            label=label,
-            color=edge_color,
-            width=edge_width,
-            font={'size': 10, 'color': 'white'}
-        )
-
-    return net
