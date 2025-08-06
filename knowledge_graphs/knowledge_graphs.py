@@ -508,9 +508,9 @@ if uploaded_file is not None:
         # FIXED Community selection with proper controls
         focus_community = None
         expansion_degree = 1
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality,
+        G, net, partition_temp = generate_graph(data, color_by_community, size_by_centrality,
                                    focus_community, expansion_degree, graph_size)
-        analytics = KnowledgeGraphAnalytics(G, data, partition)
+        analytics = KnowledgeGraphAnalytics(G, data, partition_temp)
 
         
 
