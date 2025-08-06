@@ -80,6 +80,39 @@ def generate_graph(data, color_by_community, size_by_centrality):
 
     return G, net, partition
 
+# Function to create community subgraph visualization
+def create_community_subgraph(G, partition, community_id, community_colors=None):
+    # Get nodes in the specific community
+    community_nodes = [node for node, comm in partition.items() if comm == community_id]
+    
+    # Create subgraph
+    subgraph = G.subgraph(community_nodes)
+    
+    # Create PyVis network
+    net = Network(height="600px", width="100%", notebook=False)
+    
+    # Add nodes
+    for node in subgraph.nodes():
+        color = community_colors[community_id] if community_colors else "#97c2fc"
+        net.add_node(
+            node,
+            label=str(node),
+            title=f"Node: {node}, Community: {community_id}",
+            color=color,
+            size=30,
+            font={"size": 16}
+        )
+    
+    # Add edges
+    for edge in subgraph.edges(data=True):
+        label = edge[2].get('label', '')
+        net.add_edge(edge[0], edge[1], title=label, label=label)
+    
+    # Configure physics
+    net.repulsion(node_distance=100, central_gravity=0.3, spring_length=150, spring_strength=0.02)
+    
+    return net, subgraph
+
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
     required_columns = ['head', 'tail', 'relation']
@@ -108,12 +141,59 @@ if uploaded_file is not None:
             G = st.session_state["graph"]
             partition = st.session_state["partition"]
 
+        # SUMMARY SECTION
+        st.subheader("Graph Summary")
+        num_nodes = G.number_of_nodes()
+        num_edges = G.number_of_edges()
+        if partition:
+            num_communities = len(set(partition.values()))
+        else:
+            partition = community_louvain.best_partition(G)
+            num_communities = len(set(partition.values()))
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Number of Nodes", num_nodes)
+        with col2:
+            st.metric("Number of Edges", num_edges)
+        with col3:
+            st.metric("Number of Communities", num_communities)
+
+        # TOP HUBS AND BRIDGES TABLES
+        st.subheader("Network Analysis")
+        
+        # Calculate centrality measures
+        degree_centrality = nx.degree_centrality(G)
+        betweenness_centrality = nx.betweenness_centrality(G)
+        
+        # Create DataFrames for top hubs and bridges
+        hubs_df = pd.DataFrame([
+            {"Node": node, "Degree Centrality": centrality} 
+            for node, centrality in degree_centrality.items()
+        ]).sort_values("Degree Centrality", ascending=False).head(15).reset_index(drop=True)
+        
+        bridges_df = pd.DataFrame([
+            {"Node": node, "Betweenness Centrality": centrality} 
+            for node, centrality in betweenness_centrality.items()
+        ]).sort_values("Betweenness Centrality", ascending=False).head(15).reset_index(drop=True)
+        
+        # Display tables side by side
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Top 15 Hubs (by Degree Centrality)**")
+            st.dataframe(hubs_df, use_container_width=True)
+        
+        with col2:
+            st.write("**Top 15 Bridges (by Betweenness Centrality)**")
+            st.dataframe(bridges_df, use_container_width=True)
+
         # Display the graph
+        st.subheader("Knowledge Graph Visualization")
         components.html(st.session_state["graph_html"], height=1100, width=1300)
 
         # Chatbot Interface
         st.subheader("Ask Questions About the Knowledge Graph")
-        user_question = st.text_input("Ask a question (e.g., 'Which node has the most connections?', 'How many modules are there?','Who are the tryptophan neighbors?', 'Connection between B. infantis and stress scores',or 'Who else is in the B. infantis module?'): ")
+        user_question = st.text_input("Ask a question (e.g., 'Which node has the most connections?', 'How many modules are there?','Who are the tryptophan neighbors?', 'Connection between B. infantis and stress scores', 'Who else is in the B. infantis module?', 'Show me the community insulin is a part of', 'Show me community 0'): ")
 
         if user_question:
             # Analyze user question using SpaCy
@@ -130,7 +210,79 @@ if uploaded_file is not None:
                 num_modules = len(set(partition.values()))
                 st.write(f"There are **{num_modules} modules** in the graph.")
 
+            # NEW: Show community that a specific node is part of
+            elif "show me the community" in user_question.lower() and "is a part of" in user_question.lower():
+                # Extract node name from query
+                cleaned_query = preprocess_query(user_question)
+                words = cleaned_query.split()
+                start_idx = words.index("community") + 1
+                end_idx = words.index("is")
+                node_name = " ".join(words[start_idx:end_idx])
+                
+                # Fuzzy match the node name
+                best_match, score = process.extractOne(node_name, [node.lower() for node in G.nodes()])
+                
+                if best_match and score > 70:
+                    matched_node = [node for node in G.nodes() if node.lower() == best_match][0]
+                    community_id = partition[matched_node]
+                    community_nodes = [node for node, comm in partition.items() if comm == community_id]
+                    
+                    st.write(f"**Node '{matched_node}' is part of Community {community_id}**")
+                    st.write(f"**Community {community_id} contains {len(community_nodes)} nodes:**")
+                    
+                    # Create community colors for visualization
+                    colors = plt.cm.tab10(range(len(set(partition.values()))))
+                    community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
+                    
+                    # Create and display community subgraph
+                    community_net, subgraph = create_community_subgraph(G, partition, community_id, community_colors)
+                    community_net.save_graph("community_graph.html")
+                    
+                    with open("community_graph.html", 'r') as f:
+                        community_html = f.read()
+                    
+                    st.write("**Community Visualization:**")
+                    components.html(community_html, height=700, width=1300)
+                    
+                    # List all nodes in the community
+                    st.write("**All nodes in this community:**")
+                    for i, node in enumerate(community_nodes, 1):
+                        st.write(f"{i}. {node}")
+                
+                else:
+                    st.write(f"No close match found for '{node_name}'. Please check your query.")
 
+            # NEW: Show specific community by number
+            elif "show me community" in user_question.lower() and user_question.lower().split()[-1].isdigit():
+                community_id = int(user_question.lower().split()[-1])
+                
+                if community_id in set(partition.values()):
+                    community_nodes = [node for node, comm in partition.items() if comm == community_id]
+                    
+                    st.write(f"**Community {community_id} contains {len(community_nodes)} nodes:**")
+                    
+                    # Create community colors for visualization
+                    colors = plt.cm.tab10(range(len(set(partition.values()))))
+                    community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
+                    
+                    # Create and display community subgraph
+                    community_net, subgraph = create_community_subgraph(G, partition, community_id, community_colors)
+                    community_net.save_graph("community_graph.html")
+                    
+                    with open("community_graph.html", 'r') as f:
+                        community_html = f.read()
+                    
+                    st.write("**Community Visualization:**")
+                    components.html(community_html, height=700, width=1300)
+                    
+                    # List all nodes in the community
+                    st.write("**All nodes in this community:**")
+                    for i, node in enumerate(community_nodes, 1):
+                        st.write(f"{i}. {node}")
+                
+                else:
+                    available_communities = sorted(set(partition.values()))
+                    st.write(f"Community {community_id} does not exist. Available communities are: {available_communities}")
 
             elif "who else is in the" in preprocess_query(user_question) and "module" in preprocess_query(user_question):
                 # Normalize nodes for case-insensitive matching
@@ -157,7 +309,6 @@ if uploaded_file is not None:
                         st.write(f"No node matched '{user_question}'. Please try again.")
                 else:
                     st.write(f"No close match found for '{potential_module_name}'. Please check your query.")
-
 
             elif "connection between" in user_question.lower():
                 # Extract the two nodes from the query
@@ -196,7 +347,6 @@ if uploaded_file is not None:
                                     width=edge_width
                                 )
 
-
                             # Save and display the updated graph
                             net.save_graph("highlighted_graph.html")
                             components.html(open("highlighted_graph.html", 'r').read(), height=1100, width=1300)
@@ -214,34 +364,25 @@ if uploaded_file is not None:
                 else:
                     st.write("Please format your query as: 'What is the connection between Node1 and Node2?'")
 
-
-
             elif "neighbors" in user_question.lower():
                 # Preprocess query to extract the main node
                 cleaned_query = preprocess_query(user_question)
                 keywords = cleaned_query.split()  # Split query into words
 
-                # Assume the main node is the keyword before "product"
+                # Assume the main node is the keyword before "neighbors"
                 potential_node_name = " ".join(keywords[:keywords.index("neighbors")])
 
                 # Fuzzy match the node name to graph nodes
                 best_match, score = process.extractOne(potential_node_name, [node.lower() for node in G.nodes()])
-                # st.write(f"Best match: {best_match}, Score: {score}")
 
                 if best_match and score > 70:
                     matched_node = [node for node in G.nodes() if node.lower() == best_match][0]  # Get original node name
                     neighbors = list(G.neighbors(matched_node))
-                    # st.write(f"Best neighbors: {neighbors}")
 
                     if neighbors:
                         # Filter neighbors with "product" in edge labels connected to the matched node
                         product_neighbors=neighbors
-                        # future can filter based on connecitons beign products or not
-                        # product_neighbors = [
-                        #     neighbor for neighbor in neighbors
-                        #     if "product" in G.edges[matched_node, neighbor].get("label", "").lower()
-                        # ]
-                        # st.write(f" product_neighbors: {product_neighbors}")
+                        # future can filter based on connections being products or not
 
                         if product_neighbors:
                             # Calculate PageRank for neighbors
@@ -251,7 +392,6 @@ if uploaded_file is not None:
                             sorted_products = sorted(product_neighbors, key=lambda n: page_rank[n], reverse=True)
 
                             # Display top 5 products
-                            # st.write(f"Top 5 products connected to **{matched_node}** based on PageRank:")
                             for product in sorted_products[:5]:
                                 st.write(f"- **{product.strip()}** (PageRank: {page_rank[product]:.4f})")
                         else:
@@ -260,7 +400,6 @@ if uploaded_file is not None:
                         st.write(f"Node '{matched_node}' has no neighbors.")
                 else:
                     st.write(f"No close match found for '{potential_node_name}'. Please check your query.")
-
 
     else:
         st.error(f"The uploaded file must contain the following columns: {', '.join(required_columns)}")
