@@ -502,23 +502,23 @@ if uploaded_file is not None:
     required_columns = ['head', 'tail', 'relation']
     
     if all(col in data.columns for col in required_columns):
-        # FIXED Community selection with proper controls
+        # Generate FULL graph once to get complete community info
+        G_full, _, partition_full = generate_graph(data, color_by_community, size_by_centrality)
+        
+        # Use FULL graph for getting accurate community statistics
+        analytics_full = KnowledgeGraphAnalytics(G_full, data, partition_full)
+        
+        # Community selection with proper controls
         focus_community = None
         expansion_degree = 1
-        # Generate initial graph to get community info - FIXED to use original partition
-        G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality, 
-                                         focus_community, expansion_degree, graph_size)
-        analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        
-        
-        if color_by_community and partition_temp:
+        if color_by_community and partition_full:
             st.sidebar.header("🎯 Community Focus Controls")
             
-            # Get CORRECT community stats
-            community_stats = analytics.community_analysis()
+            # Get community stats from FULL graph (this is always correct)
+            community_stats = analytics_full.community_analysis()
             
-            # Create community options with CORRECT sizes
+            # Create community options with correct sizes from full graph
             community_options = ["All Communities (Full Graph)"]
             for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                 community_options.append(f"Community {comm_id} ({stats['size']} nodes)")
@@ -537,7 +537,7 @@ if uploaded_file is not None:
                     st.sidebar.error(f"Community {focus_community} not found!")
                     focus_community = None
                 else:
-                    # FIXED: Add expansion degree control
+                    # Add expansion degree control
                     st.sidebar.subheader("🔍 Expansion Control")
                     expansion_type = st.sidebar.radio(
                         "View mode:",
@@ -558,7 +558,7 @@ if uploaded_file is not None:
                     
                     st.sidebar.success(f"Focusing on Community {focus_community}")
                     
-                    # Show CORRECT community info
+                    # Show community info from FULL graph (always accurate)
                     stats = community_stats[focus_community]
                     st.sidebar.write(f"**Community {focus_community} Details:**")
                     st.sidebar.write(f"- Core nodes: {stats['size']}")
@@ -568,54 +568,69 @@ if uploaded_file is not None:
                     if expansion_degree > 0:
                         st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
         
-        # Generate final graph with FIXED focus and expansion
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality, 
-                                         focus_community, expansion_degree, graph_size)
+        # Generate DISPLAY graph (may be filtered)
+        if focus_community is not None or expansion_degree != 1:
+            G_display, net_display, partition_display = generate_graph(
+                data, color_by_community, size_by_centrality, 
+                focus_community, expansion_degree, graph_size
+            )
+        else:
+            # If no filtering, use the full graph
+            G_display, net_display, partition_display = G_full, None, partition_full
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
             st.header("📊 Network Overview Dashboard")
             
-            # Key metrics
+            # Key metrics - CLEARLY LABELED
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Nodes", len(G_temp.nodes()))
+                if focus_community is not None:
+                    st.metric("Displayed Nodes", len(G_display.nodes()))
+                else:
+                    st.metric("Total Nodes", len(G_display.nodes()))
             with col2:
-                st.metric("Total Edges", len(G_temp.edges()))
+                st.metric("Displayed Edges", len(G_display.edges()))
             with col3:
-                st.metric("Communities", len(set(partition_temp.values())) if partition_temp else "N/A")
+                # Always use full graph for total community count
+                st.metric("Total Communities", len(set(partition_full.values())) if partition_full else "N/A")
             with col4:
-                st.metric("Average Degree", f"{np.mean([G_temp.degree(n) for n in G_temp.nodes()]):.1f}")
+                st.metric("Avg Degree (Displayed)", f"{np.mean([G_display.degree(n) for n in G_display.nodes()]):.1f}")
             
-            # Show focus info with FIXED counts
+            # Show focus info with CLEAR counts
             if focus_community is not None:
-                if partition:
-                    core_nodes_in_view = [n for n in G.nodes() if partition_temp.get(n) == focus_community]
-                    total_nodes_in_view = len(G.nodes())
+                if partition_full:  # Use full partition for accurate core count
+                    # Core nodes = nodes in the focused community (from full graph)
+                    core_nodes_in_full_graph = [n for n in G_full.nodes() if partition_full.get(n) == focus_community]
+                    core_nodes_in_display = [n for n in G_display.nodes() if partition_full.get(n) == focus_community]
+                    total_nodes_in_display = len(G_display.nodes())
                     
                     if expansion_degree == 0:
                         st.subheader(f"🎯 Community {focus_community} - Core Nodes Only")
-                        st.info(f"Showing {len(core_nodes_in_view)} core nodes from Community {focus_community}")
+                        st.info(f"Showing {len(core_nodes_in_display)} core nodes from Community {focus_community} (out of {len(core_nodes_in_full_graph)} total in this community)")
                     else:
+                        expanded_nodes = total_nodes_in_display - len(core_nodes_in_display)
                         st.subheader(f"🎯 Community {focus_community} + {expansion_degree} Degree Expansion")
-                        st.info(f"Showing {len(core_nodes_in_view)} core nodes + {total_nodes_in_view - len(core_nodes_in_view)} expanded nodes (total: {total_nodes_in_view})")
+                        st.info(f"Showing {len(core_nodes_in_display)} core nodes + {expanded_nodes} expanded nodes = {total_nodes_in_display} total displayed")
             else:
                 st.subheader("🕸️ Complete Network Visualization")
+                st.info(f"Showing complete network: {len(G_display.nodes())} nodes, {len(G_display.edges())} edges")
             
             # Add reset button when focused
             if focus_community is not None:
                 if st.button("🔄 Return to Full Network View"):
                     st.experimental_rerun()
             
-            # Use ORIGINAL partition for analytics to get correct stats
-            analytics_for_display = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
+            # For analytics, use the DISPLAY graph for what user sees, 
+            # but be clear about what you're analyzing
+            analytics_display = KnowledgeGraphAnalytics(G_display, data, partition_display)
             
             # Visualizations
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("🎯 Top Hub Nodes")
-                hubs = analytics_for_display.identify_hub_nodes(10)
+                st.subheader("🎯 Top Hub Nodes (in current view)")
+                hubs = analytics_display.identify_hub_nodes(10)
                 hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
                 
@@ -623,13 +638,13 @@ if uploaded_file is not None:
                 fig, ax = plt.subplots(figsize=(8, 6))
                 ax.barh(hub_df['Node'], hub_df['Hub Score'])
                 ax.set_xlabel('Hub Score')
-                ax.set_title('Top Hub Nodes')
+                ax.set_title('Top Hub Nodes (Current View)')
                 plt.tight_layout()
                 st.pyplot(fig)
             
             with col2:
-                st.subheader("🌉 Bridge Nodes")
-                bridges = analytics_for_display.find_bridge_nodes()[:10]
+                st.subheader("🌉 Bridge Nodes (in current view)")
+                bridges = analytics_display.find_bridge_nodes()[:10]
                 if bridges:
                     bridge_df = pd.DataFrame([{
                         'Node': b['node'],
