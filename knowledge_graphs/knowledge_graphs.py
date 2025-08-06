@@ -519,9 +519,7 @@ if uploaded_file is not None:
 
             # Get CORRECT community stats
             community_stats = analytics.community_analysis()
-            core_nodes_in_view = [n for n in G.nodes() if partition.get(n) == focus_community]
-            total_nodes_in_view = len(G.nodes())
-
+            
             # Create community options with CORRECT sizes
             community_options = ["All Communities (Full Graph)"]
             for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
@@ -542,6 +540,9 @@ if uploaded_file is not None:
                     focus_community = None
                 else:
                     # FIXED: Add expansion degree control
+                    core_nodes_in_view = [n for n in G.nodes() if partition.get(n) == focus_community]
+                    total_nodes_in_view = len(G.nodes())
+
                     st.sidebar.subheader("🔍 Expansion Control")
                     expansion_type = st.sidebar.radio(
                         "View mode:",
@@ -572,9 +573,9 @@ if uploaded_file is not None:
                     if expansion_degree > 0:
                         st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
 
-        # Generate final graph with FIXED focus and expansion
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality,
-                                         focus_community, expansion_degree, graph_size)
+        # # Generate final graph with FIXED focus and expansion
+        # G, net, partition = generate_graph(data, color_by_community, size_by_centrality,
+        #                                  focus_community, expansion_degree, graph_size)
 
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
