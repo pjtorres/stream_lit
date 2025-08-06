@@ -502,14 +502,15 @@ if uploaded_file is not None:
     required_columns = ['head', 'tail', 'relation']
     
     if all(col in data.columns for col in required_columns):
+        # FIXED Community selection with proper controls
+        focus_community = None
+        expansion_degree = 1
         # Generate initial graph to get community info - FIXED to use original partition
         G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality, 
                                          focus_community, expansion_degree, graph_size)
         analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
         
-        # FIXED Community selection with proper controls
-        focus_community = None
-        expansion_degree = 1
+        
         
         if color_by_community and partition_temp:
             st.sidebar.header("🎯 Community Focus Controls")
