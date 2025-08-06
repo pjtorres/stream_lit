@@ -575,8 +575,11 @@ if uploaded_file is not None:
                 focus_community, expansion_degree, graph_size
             )
         else:
-            # If no filtering, use the full graph
-            G_display, net_display, partition_display = G_full, None, partition_full
+            # If no filtering, use the full graph and generate the network visualization
+            G_display, net_display, partition_display = generate_graph(
+                data, color_by_community, size_by_centrality, 
+                None, 1, graph_size
+            )
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
@@ -656,7 +659,7 @@ if uploaded_file is not None:
                     st.info("No bridge nodes found (requires community detection)")
             
             # Network visualization
-            net.save_graph("temp_graph.html")
+            net_display.save_graph("temp_graph.html")
             with open("temp_graph.html", 'r') as f:
                 graph_html = f.read()
             
