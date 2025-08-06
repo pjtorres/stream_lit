@@ -574,7 +574,7 @@ if uploaded_file is not None:
                         st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
         
         # Generate final graph with FIXED focus and expansion
-        G, net, partition = generate_graph(data=None, color_by_community, size_by_centrality, 
+        G, net, partition = generate_graph(None, color_by_community, size_by_centrality, 
                                          focus_community, expansion_degree, graph_size, G_temp)
         
         # Analysis modes
