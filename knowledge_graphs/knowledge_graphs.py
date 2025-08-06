@@ -291,11 +291,17 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
 # Function to generate the graph (FIXED with proper community filtering)
 @st.cache_data
 def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, 
-                   expansion_degree=1, graph_size="large"):
-    G = nx.Graph()
-    for _, row in data.iterrows():
-        G.add_edge(row['head'], row['tail'], label=row['relation'])
-
+                   expansion_degree=1, graph_size="large", generated_graph=None):
+    
+    # If we already have a generated graph, use it; otherwise create new one
+    if generated_graph is not None:
+        G = generated_graph  # Use the existing graph
+    else:
+        # Create new graph from data
+        G = nx.Graph()
+        for _, row in data.iterrows():
+            G.add_edge(row['head'], row['tail'], label=row['relation'])
+            
     # Apply Louvain Community Detection on FULL graph first
     partition = None
     community_colors = None
@@ -496,6 +502,7 @@ with st.sidebar:
             ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
         )
 
+#################################
 # Main application logic
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
@@ -567,8 +574,8 @@ if uploaded_file is not None:
                         st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
         
         # Generate final graph with FIXED focus and expansion
-        G, net, partition = generate_graph(data, color_by_community, size_by_centrality, 
-                                         focus_community, expansion_degree, graph_size)
+        G, net, partition = generate_graph(data=None, color_by_community, size_by_centrality, 
+                                         focus_community, expansion_degree, graph_size,generated_graph=G_temp)
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
