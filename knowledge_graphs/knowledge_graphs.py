@@ -519,6 +519,8 @@ if uploaded_file is not None:
 
             # Get CORRECT community stats
             community_stats = analytics.community_analysis()
+            core_nodes_in_view = [n for n in G.nodes() if partition.get(n) == focus_community]
+            total_nodes_in_view = len(G.nodes())
 
             # Create community options with CORRECT sizes
             community_options = ["All Communities (Full Graph)"]
@@ -563,7 +565,7 @@ if uploaded_file is not None:
                     # Show CORRECT community info
                     stats = community_stats[focus_community]
                     st.sidebar.write(f"**Community {focus_community} Details:**")
-                    st.sidebar.write(f"- Core nodes: {stats['size']}")
+                    st.sidebar.write(f"- Core nodes: {len(core_nodes_in_view)}")
                     st.sidebar.write(f"- Internal edges: {stats['internal_edges']}")
                     st.sidebar.write(f"- External edges: {stats['external_edges']}")
 
