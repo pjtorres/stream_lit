@@ -250,9 +250,9 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
     # Start with core community nodes - FIXED to use correct community ID
     core_nodes = {node for node, comm in partition.items() if comm == focus_community}
     
-    if len(core_nodes) == 0:
-        st.warning(f"No nodes found in community {focus_community}")
-        return G, partition
+    # if len(core_nodes) == 0:
+    #     st.warning(f"No nodes found in community {focus_community}")
+    #     return G, partition
     
     if expansion_degree == 0:
         # Only core community nodes
