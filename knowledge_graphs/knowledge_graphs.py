@@ -695,7 +695,15 @@ if uploaded_file is not None:
             st.sidebar.write(f"**Selected:** {selected_community}")
             
             if selected_community != "All Communities (Full Graph)":
-                focus_community = int(selected_community.split()[1])
+                # Better parsing to handle community IDs correctly
+                try:
+                    # Extract community ID from string like "Community 1 (25 nodes)"
+                    community_part = selected_community.split("(")[0].strip()  # Get "Community 1" part
+                    focus_community = int(community_part.split()[-1])  # Get the last word which should be the ID
+                except (ValueError, IndexError) as e:
+                    st.sidebar.error(f"Error parsing community ID from: {selected_community}")
+                    st.sidebar.write(f"Error: {e}")
+                    focus_community = None
                 
                 # Debug info
                 st.sidebar.write(f"**Focus Community ID:** {focus_community}")
