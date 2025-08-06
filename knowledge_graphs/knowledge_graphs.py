@@ -579,18 +579,18 @@ if uploaded_file is not None:
             # Key metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Nodes", len(G.nodes()))
+                st.metric("Total Nodes", len(G_temp.nodes()))
             with col2:
-                st.metric("Total Edges", len(G.edges()))
+                st.metric("Total Edges", len(G_temp.edges()))
             with col3:
-                st.metric("Communities", len(set(partition.values())) if partition else "N/A")
+                st.metric("Communities", len(set(partition_temp.values())) if partition_temp else "N/A")
             with col4:
-                st.metric("Average Degree", f"{np.mean([G.degree(n) for n in G.nodes()]):.1f}")
+                st.metric("Average Degree", f"{np.mean([G_temp.degree(n) for n in G_temp.nodes()]):.1f}")
             
             # Show focus info with FIXED counts
             if focus_community is not None:
                 if partition:
-                    core_nodes_in_view = [n for n in G.nodes() if partition.get(n) == focus_community]
+                    core_nodes_in_view = [n for n in G.nodes() if partition_temp.get(n) == focus_community]
                     total_nodes_in_view = len(G.nodes())
                     
                     if expansion_degree == 0:
@@ -608,7 +608,7 @@ if uploaded_file is not None:
                     st.experimental_rerun()
             
             # Use ORIGINAL partition for analytics to get correct stats
-            analytics_for_display = KnowledgeGraphAnalytics(G, data, partition)
+            analytics_for_display = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
             
             # Visualizations
             col1, col2 = st.columns(2)
