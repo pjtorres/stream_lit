@@ -241,18 +241,18 @@ class KnowledgeGraphAnalytics:
         
         return dict(community_stats)
 
-# FIXED: Get community subgraph with controllable expansion - ensures correct community filtering
+# Get community subgraph with controllable expansion
 def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
-    """FIXED: Get community subgraph with controllable expansion - ensures correct community filtering"""
+    """Get community subgraph with controllable expansion"""
     if focus_community is None or partition is None:
         return G, partition
     
-    # Start with core community nodes - FIXED to use correct community ID
+    # Start with core community nodes
     core_nodes = {node for node, comm in partition.items() if comm == focus_community}
     
-    # if len(core_nodes) == 0:
-    #     st.warning(f"No nodes found in community {focus_community}")
-    #     return G, partition
+    if len(core_nodes) == 0:
+        st.warning(f"No nodes found in community {focus_community}")
+        return G, partition
     
     if expansion_degree == 0:
         # Only core community nodes
@@ -275,7 +275,7 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
             if not current_frontier:  # No more nodes to expand to
                 break
     
-    # Create subgraph - FIXED to ensure all selected nodes exist
+    # Create subgraph
     valid_nodes = {node for node in selected_nodes if node in G.nodes()}
     if len(valid_nodes) == 0:
         st.warning("No valid nodes found for subgraph")
@@ -283,49 +283,17 @@ def get_community_subgraph(G, partition, focus_community, expansion_degree=0):
         
     G_filtered = G.subgraph(valid_nodes).copy()
     
-    # Update partition for filtered graph - FIXED to maintain correct community assignments
+    # Update partition for filtered graph
     partition_filtered = {node: partition[node] for node in G_filtered.nodes() if node in partition}
     
     return G_filtered, partition_filtered
 
-# Function to generate the graph (FIXED with proper community filtering)
-@st.cache_data
-def generate_graph(data, color_by_community, size_by_centrality, focus_community=None, 
-                   expansion_degree=1, graph_size="large", generated_graph=None):
+# Helper function to create network visualization
+def create_network_visualization(G_display, partition_display, global_partition, community_colors, 
+                                size_by_centrality, focus_community, graph_size):
+    """Create the pyvis network visualization object"""
     
-    # If we already have a generated graph, use it; otherwise create new one
-    if generated_graph is not None:
-        G = generated_graph  # Use the existing graph
-    else:
-        # Create new graph from data
-        G = nx.Graph()
-        for _, row in data.iterrows():
-            G.add_edge(row['head'], row['tail'], label=row['relation'])
-            
-    # Apply Louvain Community Detection on FULL graph first
-    partition = None
-    community_colors = None
-    
-    if color_by_community:
-        partition = community_louvain.best_partition(G)
-        num_communities = len(set(partition.values()))
-        colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
-        community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
-
-    # Store original partition for analytics
-    original_partition = partition.copy() if partition else None
-
-    # FIXED: Apply community filtering AFTER community detection
-    if focus_community is not None and partition:
-        # Validate that the focus_community exists
-        available_communities = set(partition.values())
-        if focus_community not in available_communities:
-            st.error(f"Community {focus_community} not found. Available communities: {sorted(available_communities)}")
-            focus_community = None
-        else:
-            G, partition = get_community_subgraph(G, partition, focus_community, expansion_degree)
-
-    # Set visualization size with REDUCED NODE SIZES
+    # Set visualization size
     if graph_size == "extra_large":
         height, width = "900px", "100%"
         physics_distance = 150
@@ -369,20 +337,20 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
 
     # Calculate centrality on the CURRENT graph (filtered or full)
     centrality_map = {
-        "Degree Centrality": nx.degree_centrality(G),
-        "Betweenness Centrality": nx.betweenness_centrality(G),
-        "PageRank": nx.pagerank(G)
+        "Degree Centrality": nx.degree_centrality(G_display),
+        "Betweenness Centrality": nx.betweenness_centrality(G_display),
+        "PageRank": nx.pagerank(G_display)
     }
     centrality = centrality_map.get(size_by_centrality)
 
-    # Add nodes to the graph with FIXED community highlighting
-    for node in G.nodes():
-        if color_by_community and partition and node in partition:
-            node_community = partition[node]
-            node_color = community_colors.get(node_community, "#97c2fc")
+    # Add nodes to the graph
+    for node in G_display.nodes():
+        if partition_display and node in partition_display:
+            node_community = partition_display[node]
+            node_color = community_colors.get(node_community, "#97c2fc") if community_colors else "#97c2fc"
             
-            # FIXED: Highlight focused community nodes correctly
-            if focus_community is not None and node_community == focus_community:
+            # Highlight focused community nodes correctly using GLOBAL partition
+            if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
                 border_color = "#ffffff"
                 border_width = 4
             else:
@@ -400,19 +368,19 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
             node_size = node_base_size
             
         # Make focused community nodes larger
-        if focus_community is not None and partition and node in partition and partition[node] == focus_community:
-            node_size *= 1.3  # More visible increase
+        if focus_community is not None and global_partition and global_partition.get(node) == focus_community:
+            node_size *= 1.3
         
         # Create detailed tooltip
         title = f"<b>{node}</b>"
-        if color_by_community and partition and node in partition:
-            title += f"<br>Community: {partition[node]}"
-        title += f"<br>Degree: {G.degree(node)}"
+        if global_partition and node in global_partition:
+            title += f"<br>Community: {global_partition[node]}"
+        title += f"<br>Degree: {G_display.degree(node)}"
         if centrality and node in centrality:
             title += f"<br>{size_by_centrality}: {centrality[node]:.3f}"
             
         # Add neighbors info
-        neighbors = list(G.neighbors(node))
+        neighbors = list(G_display.neighbors(node))
         if len(neighbors) > 0:
             title += f"<br>Neighbors ({len(neighbors)}): {', '.join(neighbors[:5])}"
             if len(neighbors) > 5:
@@ -430,13 +398,13 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
         )
 
     # Add edges with enhanced styling
-    for edge in G.edges(data=True):
+    for edge in G_display.edges(data=True):
         label = edge[2].get('label', '')
         
         # Style edges differently for focused community
-        if focus_community is not None and partition:
-            node1_comm = partition.get(edge[0], -1)
-            node2_comm = partition.get(edge[1], -1)
+        if focus_community is not None and global_partition:
+            node1_comm = global_partition.get(edge[0], -1)
+            node2_comm = global_partition.get(edge[1], -1)
             
             if node1_comm == focus_community and node2_comm == focus_community:
                 # Internal edges in focused community
@@ -464,8 +432,7 @@ def generate_graph(data, color_by_community, size_by_centrality, focus_community
             font={'size': 10, 'color': 'white'}
         )
 
-    # Return original partition for analytics, but filtered graph for visualization
-    return G, net, original_partition
+    return net
 
 # Streamlit App
 st.set_page_config(page_title="Knowledge Graph Analytics", layout="wide")
@@ -502,28 +469,41 @@ with st.sidebar:
             ["Overview Dashboard", "Target Discovery", "Community Analysis", "Relationship Patterns", "Interactive Chat"]
         )
 
-#################################
 # Main application logic
 if uploaded_file is not None:
     data = pd.read_excel(uploaded_file)
     required_columns = ['head', 'tail', 'relation']
     
     if all(col in data.columns for col in required_columns):
-        # Generate initial graph to get community info - FIXED to use original partition
-        G_temp, _, partition_temp = generate_graph(data, color_by_community, size_by_centrality)
-        analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
+        # STEP 1: Create GLOBAL graph and do community detection ONCE
+        G_global = nx.Graph()
+        for _, row in data.iterrows():
+            G_global.add_edge(row['head'], row['tail'], label=row['relation'])
         
-        # FIXED Community selection with proper controls
+        # STEP 2: Do community detection on GLOBAL graph (only once)
+        global_partition = None
+        community_colors = None
+        
+        if color_by_community:
+            global_partition = community_louvain.best_partition(G_global)
+            num_communities = len(set(global_partition.values()))
+            colors = plt.cm.Set3(np.linspace(0, 1, num_communities))
+            community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
+        
+        # STEP 3: Create global analytics for community stats (always accurate)
+        global_analytics = KnowledgeGraphAnalytics(G_global, data, global_partition)
+        
+        # STEP 4: Community selection controls using GLOBAL stats
         focus_community = None
         expansion_degree = 1
         
-        if color_by_community and partition_temp:
+        if color_by_community and global_partition:
             st.sidebar.header("🎯 Community Focus Controls")
             
-            # Get CORRECT community stats
-            community_stats = analytics.community_analysis()
+            # Get community stats from GLOBAL graph (always correct)
+            community_stats = global_analytics.community_analysis()
             
-            # Create community options with CORRECT sizes
+            # Create community options with sizes from GLOBAL graph
             community_options = ["All Communities (Full Graph)"]
             for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                 community_options.append(f"Community {comm_id} ({stats['size']} nodes)")
@@ -531,23 +511,34 @@ if uploaded_file is not None:
             selected_community = st.sidebar.selectbox(
                 "Focus on specific community:",
                 community_options,
-                help="Select a community to zoom in and see detailed connections"
+                help="Select a community to zoom in and see detailed connections",
+                key="community_selector"
             )
             
             if selected_community != "All Communities (Full Graph)":
-                focus_community = int(selected_community.split()[1])
+                # Better parsing to handle community IDs correctly
+                try:
+                    # Extract community ID from string like "Community 1 (25 nodes)"
+                    community_part = selected_community.split("(")[0].strip()  # Get "Community 1" part
+                    focus_community = int(community_part.split()[-1])  # Get the last word which should be the ID
+                except (ValueError, IndexError) as e:
+                    st.sidebar.error(f"Error parsing community ID from: {selected_community}")
+                    st.sidebar.write(f"Error: {e}")
+                    focus_community = None
                 
                 # Validate the community exists
                 if focus_community not in community_stats:
                     st.sidebar.error(f"Community {focus_community} not found!")
+                    st.sidebar.write(f"Available communities: {list(community_stats.keys())}")
                     focus_community = None
                 else:
-                    # FIXED: Add expansion degree control
+                    # Add expansion degree control
                     st.sidebar.subheader("🔍 Expansion Control")
                     expansion_type = st.sidebar.radio(
                         "View mode:",
                         ["Core only", "Expand by degrees"],
-                        help="Core only: Show only nodes in this community\nExpand by degrees: Include neighboring nodes"
+                        help="Core only: Show only nodes in this community\nExpand by degrees: Include neighboring nodes",
+                        key="expansion_type"
                     )
                     
                     if expansion_type == "Core only":
@@ -558,12 +549,13 @@ if uploaded_file is not None:
                             min_value=1,
                             max_value=3,
                             value=1,
-                            help="Number of degrees to expand from core community"
+                            help="Number of degrees to expand from core community",
+                            key="expansion_slider"
                         )
                     
                     st.sidebar.success(f"Focusing on Community {focus_community}")
                     
-                    # Show CORRECT community info
+                    # Show community info from GLOBAL graph (always accurate)
                     stats = community_stats[focus_community]
                     st.sidebar.write(f"**Community {focus_community} Details:**")
                     st.sidebar.write(f"- Core nodes: {stats['size']}")
@@ -573,54 +565,75 @@ if uploaded_file is not None:
                     if expansion_degree > 0:
                         st.sidebar.write(f"- Expansion: +{expansion_degree} degree(s)")
         
-        # Generate final graph with FIXED focus and expansion
-        G, net, partition = generate_graph(None, color_by_community, size_by_centrality, 
-                                         focus_community, expansion_degree, graph_size, G_temp)
+        # STEP 5: Create display graph (either full or filtered subgraph)
+        if focus_community is not None:
+            # Create subgraph based on GLOBAL partition
+            G_display, partition_display = get_community_subgraph(
+                G_global, global_partition, focus_community, expansion_degree
+            )
+        else:
+            # Use full graph
+            G_display = G_global
+            partition_display = global_partition
+        
+        # STEP 6: Create visualization network object
+        net_display = create_network_visualization(
+            G_display, partition_display, global_partition, community_colors,
+            size_by_centrality, focus_community, graph_size
+        )
         
         # Analysis modes
         if analysis_mode == "Overview Dashboard":
             st.header("📊 Network Overview Dashboard")
             
-            # Key metrics
+            # Key metrics - CLEARLY LABELED
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Nodes", len(G.nodes()))
+                if focus_community is not None:
+                    st.metric("Displayed Nodes", len(G_display.nodes()))
+                else:
+                    st.metric("Total Nodes", len(G_display.nodes()))
             with col2:
-                st.metric("Total Edges", len(G.edges()))
+                st.metric("Displayed Edges", len(G_display.edges()))
             with col3:
-                st.metric("Communities", len(set(partition.values())) if partition else "N/A")
+                # Always use GLOBAL graph for total community count
+                st.metric("Total Communities", len(set(global_partition.values())) if global_partition else "N/A")
             with col4:
-                st.metric("Average Degree", f"{np.mean([G.degree(n) for n in G.nodes()]):.1f}")
+                st.metric("Avg Degree (Displayed)", f"{np.mean([G_display.degree(n) for n in G_display.nodes()]):.1f}")
             
-            # Show focus info with FIXED counts
+            # Show focus info with CLEAR counts
             if focus_community is not None:
-                if partition:
-                    core_nodes_in_view = [n for n in G.nodes() if partition.get(n) == focus_community]
-                    total_nodes_in_view = len(G.nodes())
+                if global_partition:  # Use GLOBAL partition for accurate core count
+                    # Core nodes = nodes in the focused community (from GLOBAL graph)
+                    core_nodes_in_global = [n for n in G_global.nodes() if global_partition.get(n) == focus_community]
+                    core_nodes_in_display = [n for n in G_display.nodes() if global_partition.get(n) == focus_community]
+                    total_nodes_in_display = len(G_display.nodes())
                     
                     if expansion_degree == 0:
                         st.subheader(f"🎯 Community {focus_community} - Core Nodes Only")
-                        st.info(f"Showing {len(core_nodes_in_view)} core nodes from Community {focus_community}")
+                        st.info(f"Showing {len(core_nodes_in_display)} core nodes from Community {focus_community} (out of {len(core_nodes_in_global)} total in this community)")
                     else:
+                        expanded_nodes = total_nodes_in_display - len(core_nodes_in_display)
                         st.subheader(f"🎯 Community {focus_community} + {expansion_degree} Degree Expansion")
-                        st.info(f"Showing {len(core_nodes_in_view)} core nodes + {total_nodes_in_view - len(core_nodes_in_view)} expanded nodes (total: {total_nodes_in_view})")
+                        st.info(f"Showing {len(core_nodes_in_display)} core nodes + {expanded_nodes} expanded nodes = {total_nodes_in_display} total displayed")
             else:
                 st.subheader("🕸️ Complete Network Visualization")
+                st.info(f"Showing complete network: {len(G_display.nodes())} nodes, {len(G_display.edges())} edges")
             
             # Add reset button when focused
             if focus_community is not None:
                 if st.button("🔄 Return to Full Network View"):
                     st.experimental_rerun()
             
-            # Use ORIGINAL partition for analytics to get correct stats
-            analytics_for_display = KnowledgeGraphAnalytics(G, data, partition)
+            # For analytics, use the DISPLAY graph but maintain global partition references
+            analytics_display = KnowledgeGraphAnalytics(G_display, data, partition_display)
             
             # Visualizations
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("🎯 Top Hub Nodes")
-                hubs = analytics_for_display.identify_hub_nodes(10)
+                st.subheader("🎯 Top Hub Nodes (in current view)")
+                hubs = analytics_display.identify_hub_nodes(10)
                 hub_df = pd.DataFrame(hubs, columns=['Node', 'Hub Score'])
                 st.dataframe(hub_df, use_container_width=True)
                 
@@ -628,13 +641,13 @@ if uploaded_file is not None:
                 fig, ax = plt.subplots(figsize=(8, 6))
                 ax.barh(hub_df['Node'], hub_df['Hub Score'])
                 ax.set_xlabel('Hub Score')
-                ax.set_title('Top Hub Nodes')
+                ax.set_title('Top Hub Nodes (Current View)')
                 plt.tight_layout()
                 st.pyplot(fig)
             
             with col2:
-                st.subheader("🌉 Bridge Nodes")
-                bridges = analytics_for_display.find_bridge_nodes()[:10]
+                st.subheader("🌉 Bridge Nodes (in current view)")
+                bridges = analytics_display.find_bridge_nodes()[:10]
                 if bridges:
                     bridge_df = pd.DataFrame([{
                         'Node': b['node'],
@@ -646,7 +659,7 @@ if uploaded_file is not None:
                     st.info("No bridge nodes found (requires community detection)")
             
             # Network visualization
-            net.save_graph("temp_graph.html")
+            net_display.save_graph("temp_graph.html")
             with open("temp_graph.html", 'r') as f:
                 graph_html = f.read()
             
@@ -654,9 +667,9 @@ if uploaded_file is not None:
             height_map = {"medium": 650, "large": 800, "extra_large": 950}
             components.html(graph_html, height=height_map.get(graph_size, 800))
             
-            # Relationship analysis
+            # Relationship analysis (always use GLOBAL data for comprehensive stats)
             st.subheader("🔗 Relationship Type Analysis")
-            relation_stats = analytics_for_display.analyze_relationship_patterns()
+            relation_stats = global_analytics.analyze_relationship_patterns()
             relation_df = pd.DataFrame([
                 {
                     'Relation': rel,
@@ -675,7 +688,7 @@ if uploaded_file is not None:
                 top_relations = relation_df.head(8)
                 fig, ax = plt.subplots(figsize=(8, 6))
                 ax.pie(top_relations['Frequency'], labels=top_relations['Relation'], autopct='%1.1f%%')
-                ax.set_title('Top Relationship Types')
+                ax.set_title('Top Relationship Types (Global)')
                 st.pyplot(fig)
                 
         elif analysis_mode == "Target Discovery":
@@ -708,24 +721,23 @@ if uploaded_file is not None:
             if seed_input:
                 seed_nodes = [node.strip() for node in seed_input.split(',')]
                 
-                # Use full graph for target discovery
-                full_analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
+                # ALWAYS use GLOBAL graph for target discovery
                 
                 # Fuzzy match seed nodes to actual graph nodes
                 matched_seeds = []
                 for seed in seed_nodes:
                     matches = process.extract(seed.lower(), 
-                                            [n.lower() for n in G_temp.nodes()], 
+                                            [n.lower() for n in G_global.nodes()], 
                                             limit=3)
                     if matches and matches[0][1] > 60:  # 60% similarity threshold
-                        original_node = [n for n in G_temp.nodes() if n.lower() == matches[0][0]][0]
+                        original_node = [n for n in G_global.nodes() if n.lower() == matches[0][0]][0]
                         matched_seeds.append(original_node)
                         st.success(f"Matched '{seed}' to '{original_node}'")
                     else:
                         st.warning(f"No close match found for '{seed}'")
                 
                 if matched_seeds:
-                    targets = full_analytics.find_potential_targets(
+                    targets = global_analytics.find_potential_targets(
                         matched_seeds, 
                         selected_relations if selected_relations else None,
                         min_connections
@@ -785,19 +797,18 @@ if uploaded_file is not None:
         elif analysis_mode == "Community Analysis":
             st.header("🏘️ Community Analysis")
             
-            if partition_temp:
-                # Use the ORIGINAL full graph partition for community analysis
-                full_analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
-                community_stats = full_analytics.community_analysis()
+            if global_partition:
+                # ALWAYS use GLOBAL analytics for community analysis
+                community_stats = global_analytics.community_analysis()
                 
                 st.subheader("📈 Community Overview")
                 
-                # Community summary table with FIXED sizes
+                # Community summary table
                 summary_data = []
                 for comm_id, stats in sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True):
                     summary_data.append({
                         'Community': comm_id,
-                        'Size': stats['size'],  # Now correctly calculated
+                        'Size': stats['size'],
                         'Internal Edges': stats['internal_edges'],
                         'External Edges': stats['external_edges'],
                         'Avg Centrality': f"{stats['avg_centrality']:.4f}",
@@ -851,7 +862,8 @@ if uploaded_file is not None:
                 selected_comm = st.selectbox(
                     "Select community for detailed analysis:",
                     options=list(community_stats.keys()),
-                    format_func=lambda x: f"Community {x} ({community_stats[x]['size']} nodes)"
+                    format_func=lambda x: f"Community {x} ({community_stats[x]['size']} nodes)",
+                    key="detailed_community_selector"
                 )
                 
                 if selected_comm is not None:
@@ -863,7 +875,7 @@ if uploaded_file is not None:
                         st.write("**Community Members:**")
                         members_df = pd.DataFrame({
                             'Node': stats['nodes'],
-                            'Centrality': [full_analytics.node_attributes[node]['pagerank'] for node in stats['nodes']]
+                            'Centrality': [global_analytics.node_attributes[node]['pagerank'] for node in stats['nodes']]
                         }).sort_values('Centrality', ascending=False)
                         st.dataframe(members_df, use_container_width=True)
                     
@@ -887,9 +899,8 @@ if uploaded_file is not None:
         elif analysis_mode == "Relationship Patterns":
             st.header("🔗 Relationship Pattern Analysis")
             
-            # Use full graph analytics for relationship patterns
-            full_analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
-            relation_stats = full_analytics.analyze_relationship_patterns()
+            # ALWAYS use GLOBAL analytics for relationship patterns
+            relation_stats = global_analytics.analyze_relationship_patterns()
             
             st.subheader("📊 Relationship Statistics")
             
@@ -993,8 +1004,7 @@ if uploaded_file is not None:
                                         placeholder="e.g., What are the most important nodes? Which communities are most connected?")
             
             if st.button("🚀 Ask") and user_question:
-                # Use full graph for chat analysis
-                full_analytics = KnowledgeGraphAnalytics(G_temp, data, partition_temp)
+                # ALWAYS use GLOBAL analytics for chat
                 
                 # Simple question processing
                 question_lower = user_question.lower()
@@ -1002,13 +1012,13 @@ if uploaded_file is not None:
                 
                 # Hub/important nodes questions
                 if any(keyword in question_lower for keyword in ['important', 'hub', 'central', 'key']):
-                    hubs = full_analytics.identify_hub_nodes(5)
+                    hubs = global_analytics.identify_hub_nodes(5)
                     response = f"The most important/central nodes in your graph are: {', '.join([hub[0] for hub in hubs[:5]])}. These nodes have high centrality scores and are well-connected to other parts of the network."
                 
                 # Community questions
                 elif any(keyword in question_lower for keyword in ['community', 'cluster', 'group']):
-                    if partition_temp:
-                        community_stats = full_analytics.community_analysis()
+                    if global_partition:
+                        community_stats = global_analytics.community_analysis()
                         largest_communities = sorted(community_stats.items(), key=lambda x: x[1]['size'], reverse=True)[:3]
                         response = f"Your graph has {len(community_stats)} communities. The largest communities are: " + \
                                  ", ".join([f"Community {comm} ({stats['size']} nodes)" for comm, stats in largest_communities])
@@ -1017,7 +1027,7 @@ if uploaded_file is not None:
                 
                 # Bridge nodes questions
                 elif any(keyword in question_lower for keyword in ['bridge', 'connect', 'between']):
-                    bridges = full_analytics.find_bridge_nodes()
+                    bridges = global_analytics.find_bridge_nodes()
                     if bridges:
                         top_bridges = bridges[:3]
                         response = f"The main bridge nodes that connect different communities are: {', '.join([bridge['node'] for bridge in top_bridges])}. These nodes are crucial for information flow between different parts of the network."
@@ -1026,7 +1036,7 @@ if uploaded_file is not None:
                 
                 # Relationship questions
                 elif any(keyword in question_lower for keyword in ['relation', 'connection', 'edge']):
-                    relation_stats = full_analytics.analyze_relationship_patterns()
+                    relation_stats = global_analytics.analyze_relationship_patterns()
                     top_relations = sorted(relation_stats.items(), key=lambda x: x[1]['frequency'], reverse=True)[:3]
                     response = f"The most common relationships in your graph are: " + \
                              ", ".join([f"{rel} ({stats['frequency']} occurrences)" for rel, stats in top_relations])
@@ -1037,7 +1047,7 @@ if uploaded_file is not None:
                 
                 # Size/scale questions
                 elif any(keyword in question_lower for keyword in ['size', 'big', 'large', 'how many']):
-                    response = f"Your knowledge graph contains {len(G_temp.nodes())} nodes and {len(G_temp.edges())} edges. The average degree (connections per node) is {np.mean([G_temp.degree(n) for n in G_temp.nodes()]):.1f}."
+                    response = f"Your knowledge graph contains {len(G_global.nodes())} nodes and {len(G_global.edges())} edges. The average degree (connections per node) is {np.mean([G_global.degree(n) for n in G_global.nodes()]):.1f}."
                 
                 # Default response
                 else:
