@@ -37,11 +37,11 @@ def generate_graph(data, color_by_community, size_by_centrality):
         G.add_edge(row['head'], row['tail'], label=row['relation'])
 
     # Make the network larger
-    net = Network(height="1000px", width="100%", notebook=False, bgcolor="#ffffff", font_color="black")
+    net = Network(height="850px", width="100%", notebook=False)
 
     # Apply Louvain Community Coloring with more colors
     if color_by_community:
-        partition = community_louvain.best_partition(G, random_state=42)
+        partition = community_louvain.best_partition(G,resolution=1.3,  random_state=42)
         num_communities = len(set(partition.values()))
         
         # Generate appropriate number of colors
@@ -158,7 +158,7 @@ if uploaded_file is not None:
         if partition:
             num_communities = len(set(partition.values()))
         else:
-            partition = community_louvain.best_partition(G)
+            partition = community_louvain.best_partition(G, resolution=1.3,  random_state=42)
             num_communities = len(set(partition.values()))
         
         col1, col2, col3 = st.columns(3)
@@ -230,7 +230,7 @@ if uploaded_file is not None:
 
         # Display the graph
         st.subheader("Knowledge Graph Visualization")
-        components.html(st.session_state["graph_html"],height=1200, width=1500)
+        components.html(st.session_state["graph_html"], height=1100, width=1300)
 
         # Chatbot Interface
         st.subheader("Ask Questions About the Knowledge Graph")
