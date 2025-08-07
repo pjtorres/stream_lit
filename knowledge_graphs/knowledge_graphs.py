@@ -11,6 +11,8 @@ import spacy
 import numpy as np
 
 import string
+st.set_page_config(page_title="Interactive Knowledge Graphs", layout="wide")
+
 
 # Helper function to clean the user query
 def preprocess_query(query):
