@@ -39,7 +39,7 @@ def generate_graph(data, color_by_community, size_by_centrality):
 
     # Apply Louvain Community Coloring if selected
     if color_by_community:
-        partition = community_louvain.best_partition(G)
+        partition = community_louvain.best_partition(G, random_state=42)
         num_communities = len(set(partition.values()))
         colors = plt.cm.tab10(range(num_communities))
         community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
@@ -186,6 +186,37 @@ if uploaded_file is not None:
         with col2:
             st.write("**Top 15 Bridges (by Betweenness Centrality)**")
             st.dataframe(bridges_df, use_container_width=True)
+
+        # NEW: Community Analysis Table (only when color_by_community is enabled)
+        if color_by_community:
+            st.subheader("Community Analysis")
+            
+            # Calculate PageRank for all nodes
+            pagerank_scores = nx.pagerank(G)
+            
+            # Find the most central node in each community
+            community_analysis = []
+            for community_id in sorted(set(partition.values())):
+                # Get all nodes in this community
+                community_nodes = [node for node, comm in partition.items() if comm == community_id]
+                
+                # Find the node with highest PageRank in this community
+                most_central_node = max(community_nodes, key=lambda node: pagerank_scores[node])
+                
+                community_analysis.append({
+                    "Community": community_id,
+                    "Size": len(community_nodes),
+                    "Central Node": most_central_node,
+                    "PageRank Score": round(pagerank_scores[most_central_node], 4),
+                    "Degree": G.degree(most_central_node)
+                })
+            
+            # Create and display the community analysis table
+            community_df = pd.DataFrame(community_analysis)
+            st.write("**Most Central Node in Each Community (by PageRank)**")
+            st.dataframe(community_df, use_container_width=True)
+            
+            st.caption("💡 **Tip**: These central nodes are good starting points for exploring each community. Click on a community number in your chatbot to visualize it!")
 
         # Display the graph
         st.subheader("Knowledge Graph Visualization")
