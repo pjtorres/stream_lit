@@ -39,7 +39,7 @@ def generate_graph(data, color_by_community, size_by_centrality):
 
     # Apply Louvain Community Coloring if selected
     if color_by_community:
-        partition = community_louvain.best_partition(G, random_state=42)
+        partition = community_louvain.best_partition(G, resolution=1.3 ,random_state=42)
         num_communities = len(set(partition.values()))
         colors = plt.cm.tab10(range(num_communities))
         community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
