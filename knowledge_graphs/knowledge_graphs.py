@@ -250,7 +250,7 @@ if uploaded_file is not None:
 
         # Display the graph
         st.subheader("Knowledge Graph Visualization")
-        components.html(st.session_state["graph_html"], height=1200, scrolling=False)
+        components.html(st.session_state["graph_html"], height=1200, scrolling=True)
 
         # Chatbot Interface
         st.subheader("Ask Questions About the Knowledge Graph")
