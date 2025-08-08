@@ -92,24 +92,42 @@ def generate_graph(data, color_by_community, size_by_centrality):
 
     return G, net, partition
 
-# Function to create community subgraph visualization
-def create_community_subgraph(G, partition, community_id, community_colors=None):
+# Function to create community subgraph visualization with optional 1-degree expansion
+def create_community_subgraph(G, partition, community_id, community_colors=None, expand_one_degree=False):
     # Get nodes in the specific community
     community_nodes = [node for node, comm in partition.items() if comm == community_id]
     
+    # If expand_one_degree is True, add neighbors of community nodes
+    if expand_one_degree:
+        expanded_nodes = set(community_nodes)
+        for node in community_nodes:
+            neighbors = list(G.neighbors(node))
+            expanded_nodes.update(neighbors)
+        subgraph_nodes = list(expanded_nodes)
+    else:
+        subgraph_nodes = community_nodes
+    
     # Create subgraph
-    subgraph = G.subgraph(community_nodes)
+    subgraph = G.subgraph(subgraph_nodes)
     
     # Create PyVis network
     net = Network(height="600px", width="100%", notebook=False)
     
-    # Add nodes
+    # Add nodes with different colors for original community vs expanded nodes
     for node in subgraph.nodes():
-        color = community_colors[community_id] if community_colors else "#97c2fc"
+        if node in community_nodes:
+            # Original community nodes - use community color
+            color = community_colors[community_id] if community_colors else "#97c2fc"
+            node_title = f"Node: {node}, Community: {community_id}"
+        else:
+            # Expanded nodes (1-degree neighbors) - use gray
+            color = "#d3d3d3"
+            node_title = f"Node: {node}, Neighbor of Community {community_id}"
+        
         net.add_node(
             node,
             label=str(node),
-            title=f"Node: {node}, Community: {community_id}",
+            title=node_title,
             color=color,
             size=30,
             font={"size": 16}
@@ -123,121 +141,146 @@ def create_community_subgraph(G, partition, community_id, community_colors=None)
     # Configure physics
     net.repulsion(node_distance=100, central_gravity=0.3, spring_length=150, spring_strength=0.02)
     
-    return net, subgraph
+    return net, subgraph, subgraph_nodes
 
-if uploaded_file is not None:
-    data = pd.read_excel(uploaded_file)
-    required_columns = ['head', 'tail', 'relation']
+# Add this in your sidebar section (after the existing options)
+if color_by_community:
+    expand_community = st.sidebar.checkbox("Include 1-degree neighbors in community visualization", 
+                                          help="When viewing communities, also show nodes that are 1 step away")
 
-    if all(col in data.columns for col in required_columns):
-        # Sidebar options for customization
-        st.sidebar.header("Customization Options")
-        color_by_community = st.sidebar.checkbox("Color Nodes by Louvain Communities")
-        size_by_centrality = st.sidebar.selectbox(
-            "Size Nodes by Centrality Measure",
-            ["None", "Degree Centrality", "Betweenness Centrality", "PageRank"]
+# Update the chatbot section - replace the existing "show me the community" logic with this:
+
+# NEW: Show community that a specific node is part of (with optional 1-degree expansion)
+elif "show me the community" in user_question.lower() and "is a part of" in user_question.lower():
+    # Check if user wants 1-degree expansion
+    include_neighbors = "+ 1 degree" in user_question.lower() or (color_by_community and expand_community)
+    
+    # Extract node name from query
+    cleaned_query = preprocess_query(user_question.replace("+ 1 degree", ""))  # Remove the expansion part
+    words = cleaned_query.split()
+    start_idx = words.index("community") + 1
+    end_idx = words.index("is")
+    node_name = " ".join(words[start_idx:end_idx])
+    
+    # Fuzzy match the node name
+    best_match, score = process.extractOne(node_name, [node.lower() for node in G.nodes()])
+    
+    if best_match and score > 70:
+        matched_node = [node for node in G.nodes() if node.lower() == best_match][0]
+        community_id = partition[matched_node]
+        community_nodes = [node for node, comm in partition.items() if comm == community_id]
+        
+        expansion_text = " + 1-degree neighbors" if include_neighbors else ""
+        st.write(f"**Node '{matched_node}' is part of Community {community_id}{expansion_text}**")
+        
+        # Create community colors for visualization
+        num_communities = len(set(partition.values()))
+        if num_communities <= 10:
+            colors = plt.cm.tab10(range(num_communities))
+        elif num_communities <= 20:
+            colors = plt.cm.tab20(range(num_communities))
+        else:
+            colors = plt.cm.hsv(np.linspace(0, 1, num_communities))
+        community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
+        
+        # Create and display community subgraph
+        community_net, subgraph, displayed_nodes = create_community_subgraph(
+            G, partition, community_id, community_colors, include_neighbors
         )
-
-        # Check if the graph needs to be regenerated
-        if "graph" not in st.session_state or st.session_state.get("color_by_community") != color_by_community or st.session_state.get("size_by_centrality") != size_by_centrality:
-            # Generate and save the graph
-            G, net, partition = generate_graph(data, color_by_community, size_by_centrality)
-            net.save_graph("knowledge_graph.html")
-            with open("knowledge_graph.html", 'r') as f:
-                st.session_state["graph_html"] = f.read()
-            st.session_state["graph"] = G
-            st.session_state["partition"] = partition
-            st.session_state["color_by_community"] = color_by_community
-            st.session_state["size_by_centrality"] = size_by_centrality
+        community_net.save_graph("community_graph.html")
+        
+        with open("community_graph.html", 'r') as f:
+            community_html = f.read()
+        
+        st.write("**Community Visualization:**")
+        components.html(community_html, height=700, scrolling=False)
+        
+        # Show statistics
+        if include_neighbors:
+            neighbor_nodes = [node for node in displayed_nodes if node not in community_nodes]
+            st.write(f"**Community {community_id} has {len(community_nodes)} core nodes + {len(neighbor_nodes)} neighbors = {len(displayed_nodes)} total nodes displayed**")
+            
+            # List core community nodes
+            st.write("**Core community nodes:**")
+            for i, node in enumerate(community_nodes, 1):
+                st.write(f"{i}. {node}")
+            
+            # List neighbor nodes
+            if neighbor_nodes:
+                st.write("**1-degree neighbors:**")
+                for i, node in enumerate(neighbor_nodes, 1):
+                    st.write(f"{i}. {node}")
         else:
-            G = st.session_state["graph"]
-            partition = st.session_state["partition"]
+            st.write(f"**Community {community_id} contains {len(community_nodes)} nodes:**")
+            for i, node in enumerate(community_nodes, 1):
+                st.write(f"{i}. {node}")
+    
+    else:
+        st.write(f"No close match found for '{node_name}'. Please check your query.")
 
-        # SUMMARY SECTION
-        st.subheader("Graph Summary")
-        num_nodes = G.number_of_nodes()
-        num_edges = G.number_of_edges()
-        if partition:
-            num_communities = len(set(partition.values()))
+# NEW: Show specific community by number (with optional 1-degree expansion)
+elif "show me community" in user_question.lower() and user_question.lower().split()[-1].isdigit():
+    # Check if user wants 1-degree expansion
+    include_neighbors = "+ 1 degree" in user_question.lower() or (color_by_community and expand_community)
+    
+    # Extract community number
+    query_parts = user_question.lower().replace("+ 1 degree", "").split()
+    community_id = int([part for part in query_parts if part.isdigit()][-1])
+    
+    if community_id in set(partition.values()):
+        community_nodes = [node for node, comm in partition.items() if comm == community_id]
+        
+        expansion_text = " + 1-degree neighbors" if include_neighbors else ""
+        st.write(f"**Community {community_id}{expansion_text}:**")
+        
+        # Create community colors for visualization
+        num_communities = len(set(partition.values()))
+        if num_communities <= 10:
+            colors = plt.cm.tab10(range(num_communities))
+        elif num_communities <= 20:
+            colors = plt.cm.tab20(range(num_communities))
         else:
-            partition = community_louvain.best_partition(G, resolution=1.3,  random_state=42)
-            num_communities = len(set(partition.values()))
+            colors = plt.cm.hsv(np.linspace(0, 1, num_communities))
+        community_colors = {community: rgb2hex(color[:3]) for community, color in enumerate(colors)}
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Number of Nodes", num_nodes)
-        with col2:
-            st.metric("Number of Edges", num_edges)
-        with col3:
-            st.metric("Number of Communities", num_communities)
-
-        # TOP HUBS AND BRIDGES TABLES
-        st.subheader("Network Analysis")
+        # Create and display community subgraph
+        community_net, subgraph, displayed_nodes = create_community_subgraph(
+            G, partition, community_id, community_colors, include_neighbors
+        )
+        community_net.save_graph("community_graph.html")
         
-        # Calculate centrality measures
-        degree_centrality = nx.degree_centrality(G)
-        betweenness_centrality = nx.betweenness_centrality(G)
+        with open("community_graph.html", 'r') as f:
+            community_html = f.read()
         
-        # Create DataFrames for top hubs and bridges
-        hubs_df = pd.DataFrame([
-            {"Node": node, "Degree Centrality": centrality} 
-            for node, centrality in degree_centrality.items()
-        ]).sort_values("Degree Centrality", ascending=False).head(15).reset_index(drop=True)
+        st.write("**Community Visualization:**")
+        components.html(community_html, height=700, scrolling=False)
         
-        bridges_df = pd.DataFrame([
-            {"Node": node, "Betweenness Centrality": centrality} 
-            for node, centrality in betweenness_centrality.items()
-        ]).sort_values("Betweenness Centrality", ascending=False).head(15).reset_index(drop=True)
-        
-        # Display tables side by side
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Top 15 Hubs (by Degree Centrality)**")
-            st.dataframe(hubs_df, use_container_width=True)
-        
-        with col2:
-            st.write("**Top 15 Bridges (by Betweenness Centrality)**")
-            st.dataframe(bridges_df, use_container_width=True)
-
-        # NEW: Community Analysis Table (only when color_by_community is enabled)
-        if color_by_community:
-            st.subheader("Community Analysis")
+        # Show statistics
+        if include_neighbors:
+            neighbor_nodes = [node for node in displayed_nodes if node not in community_nodes]
+            st.write(f"**Community {community_id} has {len(community_nodes)} core nodes + {len(neighbor_nodes)} neighbors = {len(displayed_nodes)} total nodes displayed**")
             
-            # Calculate PageRank for all nodes
-            pagerank_scores = nx.pagerank(G)
+            # List core community nodes
+            st.write("**Core community nodes:**")
+            for i, node in enumerate(community_nodes, 1):
+                st.write(f"{i}. {node}")
             
-            # Find the most central node in each community
-            community_analysis = []
-            for community_id in sorted(set(partition.values())):
-                # Get all nodes in this community
-                community_nodes = [node for node, comm in partition.items() if comm == community_id]
-                
-                # Find the node with highest PageRank in this community
-                most_central_node = max(community_nodes, key=lambda node: pagerank_scores[node])
-                
-                community_analysis.append({
-                    "Community": community_id,
-                    "Size": len(community_nodes),
-                    "Central Node": most_central_node,
-                    "PageRank Score": round(pagerank_scores[most_central_node], 4),
-                    "Degree": G.degree(most_central_node)
-                })
-            
-            # Create and display the community analysis table
-            community_df = pd.DataFrame(community_analysis)
-            st.write("**Most Central Node in Each Community (by PageRank)**")
-            st.dataframe(community_df, use_container_width=True)
-            
-            st.caption("💡 **Tip**: These central nodes are good starting points for exploring each community. Click on a community number in your chatbot to visualize it!")
+            # List neighbor nodes
+            if neighbor_nodes:
+                st.write("**1-degree neighbors:**")
+                for i, node in enumerate(neighbor_nodes, 1):
+                    st.write(f"{i}. {node}")
+        else:
+            st.write(f"**Community {community_id} contains {len(community_nodes)} nodes:**")
+            for i, node in enumerate(community_nodes, 1):
+                st.write(f"{i}. {node}")
+    
+    else:
+        available_communities = sorted(set(partition.values()))
+        st.write(f"Community {community_id} does not exist. Available communities are: {available_communities}")
 
-        # Display the graph
-        st.subheader("Knowledge Graph Visualization")
-        components.html(st.session_state["graph_html"], height=1200, scrolling=False)# width=1300)
-
-        # Chatbot Interface
-        st.subheader("Ask Questions About the Knowledge Graph")
-        user_question = st.text_input("Ask a question (e.g., 'Which node has the most connections?', 'How many modules are there?','Who are the tryptophan neighbors?', 'Connection between B. infantis and stress scores', 'Who else is in the B. infantis module?', 'Show me the community insulin is a part of', 'Show me community 0'): ")
-
+# Update the chatbot instruction text to include the new syntax:
+user_question = st.text_input("Ask a question (e.g., 'Which node has the most connections?', 'How many modules are there?','Who are the tryptophan neighbors?', 'Connection between B. infantis and stress scores', 'Who else is in the B. infantis module?', 'Show me the community insulin is a part of', 'Show me community 0', 'Show me community 2 + 1 degree'): ")
         if user_question:
             # Analyze user question using SpaCy
             doc = nlp(user_question)
