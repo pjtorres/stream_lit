@@ -11,7 +11,40 @@ import spacy
 import numpy as np
 
 import string
-st.set_page_config(page_title="Interactive Knowledge Graphs", layout="wide")
+
+# CRITICAL: Set page config to wide layout and remove padding
+st.set_page_config(
+    page_title="Interactive Knowledge Graphs", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Add custom CSS to remove padding and make full width
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: none;
+    }
+    
+    .stApp > div:first-child {
+        margin-top: -80px;
+    }
+    
+    /* Make the iframe container full width */
+    .stHtml {
+        width: 100% !important;
+    }
+    
+    iframe {
+        width: 100% !important;
+        border: none;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # Helper function to clean the user query
@@ -38,8 +71,14 @@ def generate_graph(data, color_by_community, size_by_centrality):
     for _, row in data.iterrows():
         G.add_edge(row['head'], row['tail'], label=row['relation'])
 
-    # Make the network larger
-    net = Network(height="850px", width="100%", notebook=False)
+    # Make the network MUCH larger and use 100% width
+    net = Network(
+        height="900px", 
+        width="100%", 
+        notebook=False,
+        bgcolor="#ffffff",
+        font_color="black"
+    )
 
     # Apply Louvain Community Coloring with more colors
     if color_by_community:
@@ -71,15 +110,15 @@ def generate_graph(data, color_by_community, size_by_centrality):
 
     # Add nodes to the graph
     for node in G.nodes():
-        node_color = community_colors[partition[node]] if color_by_community else None
-        node_size = centrality[node] * 150 if centrality else 25  # Adjust node size scaling
+        node_color = community_colors[partition[node]] if color_by_community else "#97c2fc"
+        node_size = centrality[node] * 200 if centrality else 30  # Increased node size scaling
         net.add_node(
             node,
             label=str(node),
             title=f"Node: {node}" + (f", Community: {partition[node]}" if color_by_community else ""),
             color=node_color,
             size=node_size,
-            font={"size": 20}
+            font={"size": 24}  # Increased font size
         )
 
     # Add edges to the graph
@@ -87,8 +126,29 @@ def generate_graph(data, color_by_community, size_by_centrality):
         label = edge[2].get('label', '')
         net.add_edge(edge[0], edge[1], title=label, label=label)
 
-    # Configure graph physics
-    net.repulsion(node_distance=120, central_gravity=0.2, spring_length=200, spring_strength=0.01)
+    # Configure graph physics for better spread
+    net.repulsion(
+        node_distance=150,      # Increased distance between nodes
+        central_gravity=0.1,    # Reduced central gravity for more spread
+        spring_length=250,      # Increased spring length
+        spring_strength=0.005,  # Reduced spring strength
+        damping=0.95           # Added damping for stability
+    )
+    
+    # Enable physics options for better interactivity
+    net.set_options("""
+    var options = {
+      "physics": {
+        "enabled": true,
+        "stabilization": {"iterations": 100}
+      },
+      "interaction": {
+        "dragNodes": true,
+        "dragView": true,
+        "zoomView": true
+      }
+    }
+    """)
 
     return G, net, partition
 
@@ -110,8 +170,14 @@ def create_community_subgraph(G, partition, community_id, community_colors=None,
     # Create subgraph
     subgraph = G.subgraph(subgraph_nodes)
     
-    # Create PyVis network
-    net = Network(height="600px", width="100%", notebook=False)
+    # Create PyVis network - FULL WIDTH
+    net = Network(
+        height="700px", 
+        width="100%", 
+        notebook=False,
+        bgcolor="#ffffff",
+        font_color="black"
+    )
     
     # Add nodes with different colors for original community vs expanded nodes
     for node in subgraph.nodes():
@@ -129,8 +195,8 @@ def create_community_subgraph(G, partition, community_id, community_colors=None,
             label=str(node),
             title=node_title,
             color=color,
-            size=30,
-            font={"size": 16}
+            size=35,  # Increased size
+            font={"size": 18}  # Increased font
         )
     
     # Add edges
@@ -138,8 +204,13 @@ def create_community_subgraph(G, partition, community_id, community_colors=None,
         label = edge[2].get('label', '')
         net.add_edge(edge[0], edge[1], title=label, label=label)
     
-    # Configure physics
-    net.repulsion(node_distance=100, central_gravity=0.3, spring_length=150, spring_strength=0.02)
+    # Configure physics for better spread
+    net.repulsion(
+        node_distance=120, 
+        central_gravity=0.2, 
+        spring_length=180, 
+        spring_strength=0.01
+    )
     
     return net, subgraph, subgraph_nodes
 
@@ -248,9 +319,18 @@ if uploaded_file is not None:
             
             st.caption("💡 **Tip**: These central nodes are good starting points for exploring each community. Click on a community number in your chatbot to visualize it!")
 
-        # Display the graph
+        # Display the graph - FULL WIDTH WITH NO SIDEBAR OVERLAP
         st.subheader("Knowledge Graph Visualization")
-        components.html(st.session_state["graph_html"], height=800, width=None, scrolling=False)
+        
+        # Use a container to ensure full width usage
+        with st.container():
+            # Increased height and ensured 100% width
+            components.html(
+                st.session_state["graph_html"], 
+                height=950,  # Increased height
+                width=None,  # Let it use full available width
+                scrolling=False
+            )
 
 
         # Chatbot Interface
@@ -304,7 +384,8 @@ if uploaded_file is not None:
                         community_html = f.read()
                     
                     st.write("**Community Visualization:**")
-                    components.html(community_html, height=700, scrolling=False)
+                    with st.container():
+                        components.html(community_html, height=750, scrolling=False, width=None)
                     
                     # List all nodes in the community
                     st.write("**All nodes in this community:**")
@@ -335,7 +416,8 @@ if uploaded_file is not None:
                         community_html = f.read()
                     
                     st.write("**Community Visualization:**")
-                    components.html(community_html, height=700, scrolling=False)
+                    with st.container():
+                        components.html(community_html, height=750, scrolling=False, width=None)
                     
                     # List all nodes in the community
                     st.write("**All nodes in this community:**")
@@ -396,7 +478,8 @@ if uploaded_file is not None:
                         
                         expansion_text = " + 1-degree neighbors" if expand_module else ""
                         st.write(f"**Module {node_module} Visualization{expansion_text}:**")
-                        components.html(module_html, height=700, scrolling=False)
+                        with st.container():
+                            components.html(module_html, height=750, scrolling=False, width=None)
                         
                         # Show statistics and node lists
                         if expand_module:
@@ -445,10 +528,26 @@ if uploaded_file is not None:
                                 edge_label = G.edges[shortest_path[i], shortest_path[i + 1]].get("label", "unknown")
                                 st.write(f"{shortest_path[i]} -> {shortest_path[i + 1]} via '{edge_label}'")
 
-                            # Highlight the shortest path in PyVis visualization
-                            net = Network(height="850px", width="100%", notebook=False)
+                            # Highlight the shortest path in PyVis visualization - FULL WIDTH
+                            net = Network(
+                                height="900px", 
+                                width="100%", 
+                                notebook=False,
+                                bgcolor="#ffffff",
+                                font_color="black"
+                            )
+                            
                             for node in G.nodes():
-                                net.add_node(node, label=node, title=f"Node: {node}", color="#97c2fc", size=25)
+                                node_color = "red" if node in shortest_path else "#97c2fc"
+                                node_size = 40 if node in shortest_path else 25
+                                net.add_node(
+                                    node, 
+                                    label=node, 
+                                    title=f"Node: {node}", 
+                                    color=node_color, 
+                                    size=node_size,
+                                    font={"size": 22}
+                                )
 
                             for edge in G.edges(data=True):
                                 edge_color = "red" if edge[0] in shortest_path and edge[1] in shortest_path else "gray"
@@ -461,9 +560,23 @@ if uploaded_file is not None:
                                     width=edge_width
                                 )
 
+                            # Configure physics for better spread
+                            net.repulsion(
+                                node_distance=150,
+                                central_gravity=0.1,
+                                spring_length=250,
+                                spring_strength=0.005
+                            )
+
                             # Save and display the updated graph
                             net.save_graph("highlighted_graph.html")
-                            components.html(open("highlighted_graph.html", 'r').read(), height=1100, scrolling=False)
+                            with st.container():
+                                components.html(
+                                    open("highlighted_graph.html", 'r').read(), 
+                                    height=950, 
+                                    scrolling=False, 
+                                    width=None
+                                )
 
                             # Optionally, show additional paths up to a certain length
                             paths = list(nx.all_simple_paths(G, source=node1, target=node2, cutoff=3))
