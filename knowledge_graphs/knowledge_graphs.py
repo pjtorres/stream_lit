@@ -332,6 +332,17 @@ if uploaded_file is not None:
                 scrolling=False
             )
 
+        # Add this right after your graph display to debug
+        st.write(f"Streamlit version: {st.__version__}")
+        
+        # Test width with a simple red bar
+        test_html = """
+        <div style="background: red; width: 100%; height: 50px; text-align: center; color: white;">
+        This should span FULL width if no issues
+        </div>
+        """
+        st.components.html(test_html, height=60)
+
 
         # Chatbot Interface
         st.subheader("Ask Questions About the Knowledge Graph")
